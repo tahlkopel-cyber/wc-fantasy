@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Cup Fantasy 2026</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; font-family: 'Segoe UI', system-ui, sans-serif; }
+    button { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect, useCallback } = React;
+
+    // ============================================================
+    // SUPABASE CONFIG
+    // ============================================================
+    const SUPABASE_URL = "https://qavhvnbdzmptygevqtsr.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFhdmh2bmJkem1wdHlnZXZxdHNyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMjg1MDQsImV4cCI6MjA5NTkwNDUwNH0.p-48z0O4I3HyOnZnCSoCgRivH-8_6OSC96BxDHLyITE";
+    const HEADERS = {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+    };
+
+    async function sbGet(table, query = "") {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, { headers: HEADERS });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch { return null; }
+    }
+
+    async function sbUpsert(table, data) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+          method: "POST",
+          headers: { ...HEADERS, "Prefer": "resolution=merge-duplicates,return=minimal" },
+          body: JSON.stringify(data),
+        });
+        return res.ok;
+      } catch { return false; }
+    }
+
+    async function sbDelete(table, query) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+          method: "DELETE", headers: HEADERS,
+        });
+        return res.ok;
+      } catch { return false; }
+    }
+
+    // ============================================================
+    // CONSTANTS
+    // ============================================================
+    const MANAGERS = ["Tahl", "Danny", "Waterman", "Jonny"];
+    const TOTAL_TEAMS = 48;
+    const TOTAL_ROUNDS = 12;
+
+    const SCORING = {
+      groupWinner: 3, groupRunnerUp: 2, groupThird: 1,
+      roundOf32: 5, roundOf16: 8, quarterFinal: 12,
+      semiFinal: 18, thirdPlace: 15, final: 25,
+    };
+
+    const ESPN_NAME_MAP = {
+      "Mexico": 1, "South Africa": 2, "Korea Republic": 3, "South Korea": 3,
+      "Czech Republic": 4, "Czechia": 4, "Canada": 5, "Bosnia and Herzegovina": 6,
+      "Bosnia & Herzegovina": 6, "Qatar": 7, "Switzerland": 8,
+      "Brazil": 9, "Morocco": 10, "Haiti": 11, "Scotland": 12,
+      "United States": 13, "USA": 13, "Paraguay": 14, "Australia": 15,
+      "Turkey": 16, "Türkiye": 16, "Germany": 17, "Curacao": 18, "Curaçao": 18,
+      "Ivory Coast": 19, "Cote d'Ivoire": 19, "Côte d'Ivoire": 19, "Ecuador": 20,
+      "Netherlands": 21, "Japan": 22, "Sweden": 23, "Tunisia": 24,
+      "Belgium": 25, "Egypt": 26, "Iran": 27, "New Zealand": 28,
+      "Spain": 29, "Cape Verde": 30, "Saudi Arabia": 31, "Uruguay": 32,
+      "France": 33, "Senegal": 34, "Iraq": 35, "Norway": 36,
+      "Argentina": 37, "Algeria": 38, "Austria": 39, "Jordan": 40,
+      "Portugal": 41, "DR Congo": 42, "Congo DR": 42, "Uzbekistan": 43,
+      "Colombia": 44, "England": 45, "Croatia": 46, "Ghana": 47, "Panama": 48,
+    };
+
+    const ALL_TEAMS = [
+      { id: 1,  name: "Mexico",        flag: "🇲🇽", group: "A" },
+      { id: 2,  name: "South Africa",  flag: "🇿🇦", group: "A" },
+      { id: 3,  name: "South Korea",   flag: "🇰🇷", group: "A" },
+      { id: 4,  name: "Czechia",       flag: "🇨🇿", group: "A" },
+      { id: 5,  name: "Canada",        flag: "🇨🇦", group: "B" },
+      { id: 6,  name: "Bosnia-Herz.",  flag: "🇧🇦", group: "B" },
+      { id: 7,  name: "Qatar",         flag: "🇶🇦", group: "B" },
+      { id: 8,  name: "Switzerland",   flag: "🇨🇭", group: "B" },
+      { id: 9,  name: "Brazil",        flag: "🇧🇷", group: "C" },
+      { id: 10, name: "Morocco",       flag: "🇲🇦", group: "C" },
+      { id: 11, name: "Haiti",         flag: "🇭🇹", group: "C" },
+      { id: 12, name: "Scotland",      flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", group: "C" },
+      { id: 13, name: "USA",           flag: "🇺🇸", group: "D" },
+      { id: 14, name: "Paraguay",      flag: "🇵🇾", group: "D" },
+      { id: 15, name: "Australia",     flag: "🇦🇺", group: "D" },
+      { id: 16, name: "Türkiye",       flag: "🇹🇷", group: "D" },
+      { id: 17, name: "Germany",       flag: "🇩🇪", group: "E" },
+      { id: 18, name: "Curaçao",       flag: "🇨🇼", group: "E" },
+      { id: 19, name: "Ivory Coast",   flag: "🇨🇮", group: "E" },
+      { id: 20, name: "Ecuador",       flag: "🇪🇨", group: "E" },
+      { id: 21, name: "Netherlands",   flag: "🇳🇱", group: "F" },
+      { id: 22, name: "Japan",         flag: "🇯🇵", group: "F" },
+      { id: 23, name: "Sweden",        flag: "🇸🇪", group: "F" },
+      { id: 24, name: "Tunisia",       flag: "🇹🇳", group: "F" },
+      { id: 25, name: "Belgium",       flag: "🇧🇪", group: "G" },
+      { id: 26, name: "Egypt",         flag: "🇪🇬", group: "G" },
+      { id: 27, name: "Iran",          flag: "🇮🇷", group: "G" },
+      { id: 28, name: "New Zealand",   flag: "🇳🇿", group: "G" },
+      { id: 29, name: "Spain",         flag: "🇪🇸", group: "H" },
+      { id: 30, name: "Cape Verde",    flag: "🇨🇻", group: "H" },
+      { id: 31, name: "Saudi Arabia",  flag: "🇸🇦", group: "H" },
+      { id: 32, name: "Uruguay",       flag: "🇺🇾", group: "H" },
+      { id: 33, name: "France",        flag: "🇫🇷", group: "I" },
+      { id: 34, name: "Senegal",       flag: "🇸🇳", group: "I" },
+      { id: 35, name: "Iraq",          flag: "🇮🇶", group: "I" },
+      { id: 36, name: "Norway",        flag: "🇳🇴", group: "I" },
+      { id: 37, name: "Argentina",     flag: "🇦🇷", group: "J" },
+      { id: 38, name: "Algeria",       flag: "🇩🇿", group: "J" },
+      { id: 39, name: "Austria",       flag: "🇦🇹", group: "J" },
+      { id: 40, name: "Jordan",        flag: "🇯🇴", group: "J" },
+      { id: 41, name: "Portugal",      flag: "🇵🇹", group: "K" },
+      { id: 42, name: "DR Congo",      flag: "🇨🇩", group: "K" },
+      { id: 43, name: "Uzbekistan",    flag: "🇺🇿", group: "K" },
+      { id: 44, name: "Colombia",      flag: "🇨🇴", group: "K" },
+      { id: 45, name: "England",       flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", group: "L" },
+      { id: 46, name: "Croatia",       flag: "🇭🇷", group: "L" },
+      { id: 47, name: "Ghana",         flag: "🇬🇭", group: "L" },
+      { id: 48, name: "Panama",        flag: "🇵🇦", group: "L" },
+    ];
+
+    function buildSnakeOrder(order) {
+      const picks = [];
+      for (let r = 0; r < TOTAL_ROUNDS; r++) {
+        const o = r % 2 === 0 ? [...order] : [...order].reverse();
+        o.forEach((m, i) => picks.push({ pickNumber: r * 4 + i + 1, round: r + 1, manager: m }));
+      }
+      return picks;
+    }
+
+    function shuffleArray(arr) {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // ============================================================
+    // DATABASE OPS
+    // ============================================================
+    async function loadAllData() {
+      const [configRows, pickRows, resultRows] = await Promise.all([
+        sbGet("config", "select=key,value"),
+        sbGet("picks", "select=manager,team_id,pick_number&order=pick_number.asc"),
+        sbGet("results", "select=team_id,type,round_key"),
+      ]);
+      if (configRows === null) return null;
+      const config = {};
+      (configRows || []).forEach(r => { config[r.key] = r.value; });
+      const picks = {};
+      MANAGERS.forEach(m => picks[m] = []);
+      (pickRows || []).forEach(r => { if (picks[r.manager] !== undefined) picks[r.manager].push(r.team_id); });
+      const groupResults = {}, knockoutResults = {};
+      (resultRows || []).forEach(r => {
+        if (r.type === "group") groupResults[r.team_id] = r.round_key;
+        else if (r.type === "knockout") {
+          if (!knockoutResults[r.team_id]) knockoutResults[r.team_id] = [];
+          if (!knockoutResults[r.team_id].includes(r.round_key)) knockoutResults[r.team_id].push(r.round_key);
+        }
+      });
+      return {
+        draftOrder: config.draft_order ? config.draft_order.split(",") : [],
+        pickIndex: parseInt(config.pick_index || "0"),
+        picks, groupResults, knockoutResults,
+      };
+    }
+
+    async function saveDraftOrder(order) { return sbUpsert("config", { key: "draft_order", value: order.join(",") }); }
+    async function savePickIndex(idx) { return sbUpsert("config", { key: "pick_index", value: String(idx) }); }
+    async function savePick(manager, teamId, pickNumber) { return sbUpsert("picks", { manager, team_id: teamId, pick_number: pickNumber }); }
+
+    async function saveGroupResult(teamId, result) {
+      if (!result) await sbDelete("results", `team_id=eq.${teamId}&type=eq.group`);
+      else await sbUpsert("results", { team_id: teamId, type: "group", round_key: result });
+    }
+
+    async function saveKnockoutResults(kr) {
+      await sbDelete("results", "type=eq.knockout");
+      const rows = [];
+      Object.entries(kr).forEach(([tid, rounds]) => (rounds || []).forEach(r => rows.push({ team_id: parseInt(tid), type: "knockout", round_key: r })));
+      if (rows.length > 0) await sbUpsert("results", rows);
+    }
+
+    async function resetDatabase(newOrder) {
+      await Promise.all([sbDelete("picks", "pick_number=gte.0"), sbDelete("results", "team_id=gte.0")]);
+      await Promise.all([
+        sbUpsert("config", { key: "draft_order", value: newOrder.join(",") }),
+        sbUpsert("config", { key: "pick_index", value: "0" }),
+      ]);
+    }
+
+    // ============================================================
+    // ESPN
+    // ============================================================
+    const PROXY = "https://corsproxy.io/?";
+    const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world";
+
+    function resolveTeamId(name) {
+      if (!name) return null;
+      if (ESPN_NAME_MAP[name] !== undefined) return ESPN_NAME_MAP[name];
+      const lower = name.toLowerCase();
+      for (const [k, v] of Object.entries(ESPN_NAME_MAP)) { if (k.toLowerCase() === lower) return v; }
+      for (const [k, v] of Object.entries(ESPN_NAME_MAP)) { if (lower.includes(k.toLowerCase()) || k.toLowerCase().includes(lower)) return v; }
+      return null;
+    }
+
+    async function fetchESPN() {
+      const urls = [`${ESPN_BASE}/scoreboard`, `${ESPN_BASE}/scoreboard?limit=100&dates=20260611-20260630`, `${ESPN_BASE}/scoreboard?limit=100&dates=20260701-20260720`];
+      const all = [];
+      for (const url of urls) {
+        try { const r = await fetch(PROXY + encodeURIComponent(url)); if (r.ok) { const d = await r.json(); if (d?.events) all.push(...d.events); } } catch {}
+      }
+      const seen = new Set();
+      return all.filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
+    }
+
+    function parseMatches(events) {
+      return events.map(ev => {
+        const comp = ev.competitions?.[0];
+        const home = comp?.competitors?.find(c => c.homeAway === "home");
+        const away = comp?.competitors?.find(c => c.homeAway === "away");
+        const sn = comp?.status?.type?.name || "";
+        const hn = home?.team?.displayName || home?.team?.name || "";
+        const an = away?.team?.displayName || away?.team?.name || "";
+        const notes = comp?.notes?.[0]?.headline || ev.name || "";
+        const isKnockout = ev.season?.type === 3 || ["round of","quarter","semi","final"].some(k => notes.toLowerCase().includes(k));
+        return { id: ev.id, homeTeam: hn, awayTeam: an, homeId: resolveTeamId(hn), awayId: resolveTeamId(an), homeScore: parseInt(home?.score || "0"), awayScore: parseInt(away?.score || "0"), completed: sn === "STATUS_FINAL", live: sn === "STATUS_IN_PROGRESS", isKnockout, notes, status: comp?.status?.type?.shortDetail || "" };
+      });
+    }
+
+    function computeGroupStandings(matches) {
+      const stats = {};
+      ALL_TEAMS.forEach(t => { stats[t.id] = { id: t.id, group: t.group, pts: 0, gf: 0, ga: 0, played: 0 }; });
+      matches.forEach(m => {
+        if (!m.completed || m.isKnockout || !m.homeId || !m.awayId || !stats[m.homeId] || !stats[m.awayId]) return;
+        stats[m.homeId].played++; stats[m.awayId].played++;
+        stats[m.homeId].gf += m.homeScore; stats[m.homeId].ga += m.awayScore;
+        stats[m.awayId].gf += m.awayScore; stats[m.awayId].ga += m.homeScore;
+        if (m.homeScore > m.awayScore) stats[m.homeId].pts += 3;
+        else if (m.homeScore < m.awayScore) stats[m.awayId].pts += 3;
+        else { stats[m.homeId].pts++; stats[m.awayId].pts++; }
+      });
+      const gr = {}, thirds = [];
+      "ABCDEFGHIJKL".split("").forEach(grp => {
+        const teams = ALL_TEAMS.filter(t => t.group === grp).map(t => stats[t.id]);
+        if (!teams.some(t => t.played > 0)) return;
+        teams.sort((a, b) => b.pts - a.pts || (b.gf-b.ga)-(a.gf-a.ga) || b.gf - a.gf);
+        const gm = matches.filter(m => !m.isKnockout && m.completed && (stats[m.homeId]?.group===grp || stats[m.awayId]?.group===grp));
+        if (gm.length >= 6) { gr[teams[0].id]="winner"; gr[teams[1].id]="runnerUp"; thirds.push({...teams[2],gd:teams[2].gf-teams[2].ga}); }
+        else { if(teams[0].played>0) gr[teams[0].id]="winner"; if(teams[1].played>0) gr[teams[1].id]="runnerUp"; }
+      });
+      thirds.sort((a,b) => b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
+      thirds.slice(0,8).forEach(t => { gr[t.id]="third"; });
+      return gr;
+    }
+
+    function computeKnockoutResults(matches) {
+      const kr = {};
+      matches.forEach(m => {
+        if (!m.completed || !m.isKnockout || !m.homeId || !m.awayId) return;
+        const n = m.notes.toLowerCase();
+        let round = null;
+        if (n.includes("final") && !n.includes("semi") && !n.includes("quarter") && !n.includes("third")) round = "final";
+        else if (n.includes("third place")||n.includes("3rd place")) round = "thirdPlace";
+        else if (n.includes("semifinal")||n.includes("semi-final")) round = "semiFinal";
+        else if (n.includes("quarterfinal")||n.includes("quarter-final")) round = "quarterFinal";
+        else if (n.includes("round of 16")) round = "roundOf16";
+        else if (n.includes("round of 32")) round = "roundOf32";
+        if (!round) return;
+        const wid = m.homeScore > m.awayScore ? m.homeId : m.awayScore > m.homeScore ? m.awayId : null;
+        if (wid) { if (!kr[wid]) kr[wid]=[]; if (!kr[wid].includes(round)) kr[wid].push(round); }
+      });
+      return kr;
+    }
+
+    function calcScores(picks, gr, kr) {
+      const scores = {};
+      MANAGERS.forEach(m => scores[m] = 0);
+      const t2m = {};
+      Object.entries(picks).forEach(([mgr, ids]) => ids.forEach(id => t2m[id] = mgr));
+      Object.entries(gr).forEach(([tid, res]) => {
+        const mgr = t2m[parseInt(tid)]; if (!mgr || !res) return;
+        if (res==="winner") scores[mgr]+=SCORING.groupWinner;
+        else if (res==="runnerUp") scores[mgr]+=SCORING.groupRunnerUp;
+        else if (res==="third") scores[mgr]+=SCORING.groupThird;
+      });
+      Object.entries(kr).forEach(([tid, rounds]) => {
+        const mgr = t2m[parseInt(tid)]; if (!mgr||!Array.isArray(rounds)) return;
+        rounds.forEach(r => { scores[mgr]+=SCORING[r]||0; });
+      });
+      return scores;
+    }
+
+    // ============================================================
+    // STYLES
+    // ============================================================
+    const S = {
+      page:{minHeight:"100vh",background:"linear-gradient(160deg,#0f172a 0%,#1a2744 100%)",paddingBottom:40},
+      splash:{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#0f172a",gap:16},
+      loadingBar:{width:200,height:4,background:"#1e293b",borderRadius:2,overflow:"hidden"},
+      loadingFill:{width:"60%",height:"100%",background:"#f59e0b",borderRadius:2},
+      hero:{textAlign:"center",padding:"44px 20px 28px",background:"linear-gradient(180deg,#1e3a5f55 0%,transparent 100%)"},
+      heroTitle:{color:"#f1f5f9",fontSize:30,fontWeight:800,margin:"10px 0 6px",letterSpacing:"-1px"},
+      heroSub:{color:"#64748b",fontSize:13,margin:0},
+      card:{margin:"0 16px 16px",background:"#1e293b",borderRadius:16,padding:20,border:"1px solid #334155"},
+      prompt:{color:"#94a3b8",fontSize:13,textAlign:"center",margin:"0 0 16px"},
+      mgrGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16},
+      mgrBtn:{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"18px 12px",background:"linear-gradient(135deg,#1e3a5f,#1e40af)",border:"1px solid #3b82f6",borderRadius:12,cursor:"pointer"},
+      avatar:{width:44,height:44,background:"#f59e0b",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:800,color:"#000"},
+      mgrLabel:{color:"#f1f5f9",fontSize:16,fontWeight:700},
+      adminBtn:{width:"100%",padding:10,background:"transparent",border:"1px solid #334155",borderRadius:8,color:"#64748b",fontSize:13,cursor:"pointer"},
+      scoreCard:{margin:"0 16px",background:"#1e293b",borderRadius:12,border:"1px solid #334155",overflow:"hidden"},
+      scoreToggle:{width:"100%",padding:"12px 16px",background:"transparent",border:"none",color:"#94a3b8",fontSize:14,fontWeight:600,cursor:"pointer",textAlign:"left"},
+      scoreRow:{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:"1px solid #0f172a"},
+      notif:{position:"fixed",top:0,left:0,right:0,padding:"12px 20px",color:"#fff",fontSize:13,fontWeight:600,textAlign:"center",zIndex:9999},
+      topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:"#0f172a",borderBottom:"1px solid #1e293b",position:"sticky",top:0,zIndex:100},
+      backBtn:{background:"transparent",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:14,padding:"4px 8px"},
+      topTitle:{color:"#f1f5f9",fontWeight:700,fontSize:16},
+      topUser:{color:"#f59e0b",fontWeight:700,fontSize:14},
+      tabBar:{display:"flex",background:"#0f172a",borderBottom:"1px solid #1e293b",overflowX:"auto"},
+      tabBtn:{flex:1,padding:"10px 6px",background:"transparent",border:"none",color:"#64748b",fontSize:11,fontWeight:600,cursor:"pointer",borderBottom:"2px solid transparent",whiteSpace:"nowrap",minWidth:60},
+      tabActive:{color:"#f59e0b",borderBottom:"2px solid #f59e0b"},
+      turnBanner:{borderRadius:12,padding:"14px 16px",marginBottom:10,display:"flex",alignItems:"center",justifyContent:"space-between"},
+      yourTurn:{background:"#f59e0b",color:"#000",fontWeight:800,fontSize:11,padding:"4px 10px",borderRadius:20},
+      orderRow:{display:"flex",gap:8,marginBottom:10,overflowX:"auto",paddingBottom:4},
+      orderChip:{display:"flex",flexDirection:"column",alignItems:"center",padding:"6px 12px",borderRadius:8,minWidth:66,gap:1,flexShrink:0},
+      waiting:{background:"#1e293b",border:"1px solid #334155",borderRadius:8,padding:"10px 14px",color:"#94a3b8",fontSize:13,marginBottom:10,textAlign:"center"},
+      filterRow:{display:"flex",gap:6,overflowX:"auto",paddingBottom:8,marginBottom:8},
+      filterBtn:{padding:"4px 12px",background:"#1e293b",border:"1px solid #334155",borderRadius:20,color:"#94a3b8",fontSize:12,cursor:"pointer",flexShrink:0},
+      filterActive:{background:"#f59e0b",border:"1px solid #f59e0b",color:"#000",fontWeight:700},
+      teamGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},
+      teamCard:{display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"10px 6px",background:"#1e293b",border:"1px solid #334155",borderRadius:10,cursor:"default"},
+      teamPicked:{background:"#0f172a",border:"1px solid #1e293b",opacity:0.45},
+      teamMine:{background:"#0c2340",border:"2px solid #3b82f6",opacity:1},
+      teamAvail:{border:"1px solid #f59e0b",cursor:"pointer",boxShadow:"0 0 8px #f59e0b30"},
+      completeBanner:{textAlign:"center",padding:"32px 16px",background:"#1e293b",borderRadius:12,marginBottom:16,border:"1px solid #334155"},
+      mgrtabs:{display:"flex",gap:8,marginBottom:16,overflowX:"auto"},
+      mgrtab:{padding:"8px 14px",background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#94a3b8",fontSize:13,fontWeight:600,cursor:"pointer",flexShrink:0},
+      mgrtabActive:{background:"#1e3a5f",border:"1px solid #3b82f6",color:"#f1f5f9"},
+      squadCard:{background:"#1e293b",border:"1px solid #334155",borderRadius:10,padding:12},
+      empty:{textAlign:"center",padding:"40px 0",color:"#475569"},
+      sectionLabel:{color:"#64748b",fontSize:12,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8,marginTop:4},
+    };
+
+    // ============================================================
+    // MAIN APP
+    // ============================================================
+    function App() {
+      const [view, setView] = useState("loading");
+      const [loadError, setLoadError] = useState(null);
+      const [currentManager, setCurrentManager] = useState(null);
+      const [draftOrder, setDraftOrder] = useState([]);
+      const [snakePicks, setSnakePicks] = useState([]);
+      const [picks, setPicks] = useState({});
+      const [pickIndex, setPickIndex] = useState(0);
+      const [groupResults, setGroupResults] = useState({});
+      const [knockoutResults, setKnockoutResults] = useState({});
+      const [matches, setMatches] = useState([]);
+      const [scores, setScores] = useState({});
+      const [adminMode, setAdminMode] = useState(false);
+      const [notif, setNotif] = useState(null);
+      const [draftDone, setDraftDone] = useState(false);
+      const [tab, setTab] = useState("draft");
+      const [scoringOpen, setScoringOpen] = useState(false);
+      const [lastUpdated, setLastUpdated] = useState(null);
+      const [saving, setSaving] = useState(false);
+
+      function notify(msg, type = "ok") {
+        setNotif({ msg, type });
+        setTimeout(() => setNotif(null), 3500);
+      }
+
+      useEffect(() => {
+        async function init() {
+          const data = await loadAllData();
+          if (!data) { setLoadError("Could not connect to database. Check your internet and try again."); setView("error"); return; }
+          let { draftOrder: order, pickIndex: idx, picks: p, groupResults: gr, knockoutResults: kr } = data;
+          if (!order || order.length === 0) { order = shuffleArray(MANAGERS); await saveDraftOrder(order); await savePickIndex(0); }
+          setDraftOrder(order); setSnakePicks(buildSnakeOrder(order));
+          setPicks(p); setPickIndex(idx); setGroupResults(gr); setKnockoutResults(kr);
+          if (Object.values(p).reduce((a,b)=>a+b.length,0) >= TOTAL_TEAMS) setDraftDone(true);
+          setView("home");
+        }
+        init();
+      }, []);
+
+      useEffect(() => {
+        if (view !== "app") return;
+        const t = setInterval(async () => {
+          const data = await loadAllData();
+          if (!data) return;
+          setPicks(data.picks); setPickIndex(data.pickIndex);
+          setGroupResults(data.groupResults); setKnockoutResults(data.knockoutResults);
+          if (Object.values(data.picks).reduce((a,b)=>a+b.length,0) >= TOTAL_TEAMS) setDraftDone(true);
+        }, 15000);
+        return () => clearInterval(t);
+      }, [view]);
+
+      const refreshESPN = useCallback(async () => {
+        const events = await fetchESPN();
+        if (!events || events.length === 0) return;
+        const parsed = parseMatches(events);
+        setMatches(parsed);
+        const autoGR = computeGroupStandings(parsed);
+        const autoKR = computeKnockoutResults(parsed);
+        if (Object.keys(autoGR).length > 0 || Object.keys(autoKR).length > 0) {
+          setGroupResults(autoGR); setKnockoutResults(autoKR);
+          await saveKnockoutResults(autoKR);
+          Object.entries(autoGR).forEach(([tid, res]) => saveGroupResult(parseInt(tid), res));
+          setLastUpdated(new Date());
+        }
+      }, []);
+
+      useEffect(() => { refreshESPN(); const t = setInterval(refreshESPN, 90000); return () => clearInterval(t); }, [refreshESPN]);
+      useEffect(() => { if (draftOrder.length) setScores(calcScores(picks, groupResults, knockoutResults)); }, [picks, draftOrder, groupResults, knockoutResults]);
+
+      const doPick = useCallback(async (teamId) => {
+        if (!currentManager || saving) return;
+        const cur = snakePicks[pickIndex];
+        if (!cur || cur.manager !== currentManager) { notify("It's not your turn!", "err"); return; }
+        if (Object.values(picks).flat().includes(teamId)) { notify("Already picked!", "err"); return; }
+        setSaving(true);
+        const newIdx = pickIndex + 1;
+        const ok1 = await savePick(currentManager, teamId, pickIndex + 1);
+        const ok2 = await savePickIndex(newIdx);
+        if (!ok1 || !ok2) { notify("Save failed — check connection and try again.", "err"); setSaving(false); return; }
+        const newPicks = { ...picks, [currentManager]: [...(picks[currentManager]||[]), teamId] };
+        setPicks(newPicks); setPickIndex(newIdx); setSaving(false);
+        if (newIdx >= TOTAL_TEAMS) { setDraftDone(true); notify("🏆 Draft complete!", "ok"); }
+        else notify(`Picked! Notify ${snakePicks[newIdx].manager} on WhatsApp — it's their turn.`, "ok");
+      }, [currentManager, pickIndex, picks, snakePicks, saving]);
+
+      const saveManualGR = async (teamId, result) => {
+        const nr = { ...groupResults, [teamId]: result }; setGroupResults(nr); await saveGroupResult(teamId, result);
+      };
+      const saveManualKR = async (teamId, round) => {
+        const existing = knockoutResults[teamId]||[];
+        const updated = existing.includes(round) ? existing.filter(r=>r!==round) : [...existing,round];
+        const nr = { ...knockoutResults, [teamId]: updated }; setKnockoutResults(nr); await saveKnockoutResults(nr);
+      };
+      const doReset = async () => {
+        if (!window.confirm("Reset the entire draft? All picks will be permanently lost.")) return;
+        const order = shuffleArray(MANAGERS);
+        await resetDatabase(order);
+        setDraftOrder(order); setSnakePicks(buildSnakeOrder(order));
+        setPicks({}); setPickIndex(0); setGroupResults({}); setKnockoutResults({}); setDraftDone(false);
+        notify("Draft reset!", "ok");
+      };
+
+      if (view==="loading") return (
+        <div style={S.splash}>
+          <div style={{fontSize:56}}>⚽</div>
+          <div style={S.loadingBar}><div style={S.loadingFill}/></div>
+          <p style={{color:"#64748b",fontSize:14,margin:0}}>Connecting to database...</p>
+        </div>
+      );
+
+      if (view==="error") return (
+        <div style={S.splash}>
+          <div style={{fontSize:48}}>❌</div>
+          <p style={{color:"#f87171",textAlign:"center",padding:"0 24px",maxWidth:300}}>{loadError}</p>
+          <button onClick={()=>window.location.reload()} style={{padding:"10px 24px",background:"#f59e0b",border:"none",borderRadius:8,color:"#000",fontWeight:700,cursor:"pointer"}}>Retry</button>
+        </div>
+      );
+
+      if (view==="home") return (
+        <div style={S.page}>
+          <div style={S.hero}>
+            <div style={{fontSize:60}}>⚽</div>
+            <h1 style={S.heroTitle}>World Cup Fantasy</h1>
+            <p style={S.heroSub}>2026 FIFA World Cup • 4-Manager Draft</p>
+          </div>
+          <div style={S.card}>
+            <p style={S.prompt}>Select your name to continue</p>
+            <div style={S.mgrGrid}>
+              {MANAGERS.map(m => (
+                <button key={m} style={S.mgrBtn} onClick={()=>{setCurrentManager(m);setAdminMode(false);setView("app");setTab("draft");}}>
+                  <div style={S.avatar}>{m[0]}</div>
+                  <span style={S.mgrLabel}>{m}</span>
+                </button>
+              ))}
+            </div>
+            <button style={S.adminBtn} onClick={()=>{setCurrentManager("Admin");setAdminMode(true);setView("app");setTab("admin");}}>⚙️ Admin / Override Scores</button>
+          </div>
+          <div style={S.scoreCard}>
+            <button style={S.scoreToggle} onClick={()=>setScoringOpen(v=>!v)}>📊 Scoring System {scoringOpen?"▲":"▼"}</button>
+            {scoringOpen && (
+              <div style={{padding:"0 16px 16px"}}>
+                {[["Group Winner","3 pts"],["Group Runner-Up","2 pts"],["3rd Place Advance","1 pt"],["Round of 32 Win","5 pts"],["Round of 16 Win","8 pts"],["Quarterfinal Win","12 pts"],["Semifinal Win","18 pts"],["3rd Place Match Win","15 pts"],["Final / Champion","25 pts"]].map(([l,v])=>(
+                  <div key={l} style={S.scoreRow}><span style={{color:"#cbd5e1",fontSize:13}}>{l}</span><span style={{color:"#f59e0b",fontWeight:700}}>{v}</span></div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+
+      const curPick = snakePicks[pickIndex];
+      const allPicked = Object.values(picks).flat();
+      const tabs = ["draft","squad","leaderboard","scores",...(adminMode?["admin"]:[])];
+
+      return (
+        <div style={S.page}>
+          {notif && <div style={{...S.notif,background:notif.type==="err"?"#dc2626":"#16a34a"}}>{notif.msg}</div>}
+          {saving && <div style={{...S.notif,background:"#1e40af"}}>💾 Saving pick...</div>}
+          <div style={S.topbar}>
+            <button style={S.backBtn} onClick={()=>setView("home")}>← Back</button>
+            <span style={S.topTitle}>⚽ WC Fantasy</span>
+            <span style={S.topUser}>{currentManager}</span>
+          </div>
+          <div style={S.tabBar}>
+            {tabs.map(t=>(
+              <button key={t} style={{...S.tabBtn,...(tab===t?S.tabActive:{})}} onClick={()=>setTab(t)}>
+                {t==="draft"?"📋 Draft":t==="squad"?"👥 Squad":t==="leaderboard"?"🏆 Board":t==="scores"?"⚽ Live":"⚙️ Admin"}
+              </button>
+            ))}
+          </div>
+          <div style={{padding:16}}>
+            {tab==="draft" && <DraftTab snakePicks={snakePicks} pickIndex={pickIndex} curPick={curPick} currentManager={currentManager} picks={picks} allPicked={allPicked} draftDone={draftDone} draftOrder={draftOrder} onPick={doPick} saving={saving}/>}
+            {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults}/>}
+            {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated}/>}
+            {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN}/>}
+            {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onRefresh={refreshESPN}/>}
+          </div>
+        </div>
+      );
+    }
+
+    function DraftTab({snakePicks,pickIndex,curPick,currentManager,picks,allPicked,draftDone,draftOrder,onPick,saving}) {
+      const [grpFilter,setGrpFilter]=useState("All");
+      const myPicks=picks[currentManager]||[];
+      const isMyTurn=!draftDone&&curPick?.manager===currentManager;
+      const filtered=ALL_TEAMS.filter(t=>grpFilter==="All"||t.group===grpFilter);
+      return (
+        <div>
+          {draftDone?(
+            <div style={S.completeBanner}><div style={{fontSize:48}}>🏆</div><h2 style={{color:"#f59e0b",margin:"8px 0 4px"}}>Draft Complete!</h2><p style={{color:"#94a3b8",margin:0}}>All 48 teams drafted. Good luck!</p></div>
+          ):(
+            <>
+              <div style={{...S.turnBanner,background:isMyTurn?"linear-gradient(135deg,#15803d,#166534)":"linear-gradient(135deg,#1e3a5f,#1e40af)"}}>
+                <div>
+                  <div style={{color:"rgba(255,255,255,0.6)",fontSize:11}}>Pick #{pickIndex+1} of 48</div>
+                  <div style={{color:"#fff",fontSize:20,fontWeight:800}}>{curPick?.manager}'s Turn</div>
+                  <div style={{color:"rgba(255,255,255,0.7)",fontSize:12}}>Round {curPick?.round} of 12</div>
+                </div>
+                {isMyTurn&&<div style={S.yourTurn}>YOUR TURN!</div>}
+              </div>
+              <div style={S.orderRow}>
+                {draftOrder.map((m,i)=>{
+                  const isCur=m===curPick?.manager;
+                  return <div key={m} style={{...S.orderChip,background:isCur?"#f59e0b":"#1e293b"}}><span style={{color:isCur?"#000":"#64748b",fontSize:10}}>#{i+1}</span><span style={{color:isCur?"#000":"#e2e8f0",fontWeight:700,fontSize:13}}>{m}</span><span style={{color:isCur?"#000":"#64748b",fontSize:10}}>{(picks[m]||[]).length}</span></div>;
+                })}
+              </div>
+              {!isMyTurn&&<div style={S.waiting}>⏳ Waiting for <strong>{curPick?.manager}</strong> to pick... (auto-refreshes every 15s)</div>}
+            </>
+          )}
+          <div style={S.filterRow}>
+            {["All","A","B","C","D","E","F","G","H","I","J","K","L"].map(g=>(
+              <button key={g} style={{...S.filterBtn,...(grpFilter===g?S.filterActive:{})}} onClick={()=>setGrpFilter(g)}>{g}</button>
+            ))}
+          </div>
+          <div style={S.teamGrid}>
+            {filtered.map(team=>{
+              const picked=allPicked.includes(team.id);
+              const pickedBy=picked?Object.entries(picks).find(([,ids])=>ids.includes(team.id))?.[0]:null;
+              const mine=myPicks.includes(team.id);
+              const canClick=isMyTurn&&!picked&&!saving;
+              return (
+                <button key={team.id} disabled={!canClick} onClick={()=>canClick&&onPick(team.id)} style={{...S.teamCard,...(picked&&!mine?S.teamPicked:{}),...(mine?S.teamMine:{}),...(canClick?S.teamAvail:{})}}>
+                  <span style={{fontSize:26}}>{team.flag}</span>
+                  <span style={{color:"#e2e8f0",fontSize:11,fontWeight:600,textAlign:"center",lineHeight:1.3}}>{team.name}</span>
+                  <span style={{color:"#475569",fontSize:10}}>Grp {team.group}</span>
+                  {picked&&<span style={{color:mine?"#4ade80":"#f59e0b",fontSize:9,fontWeight:700}}>{mine?"✓ Mine":pickedBy}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function SquadTab({picks,currentManager,groupResults,knockoutResults}) {
+      const [viewing,setViewing]=useState(currentManager);
+      const teams=ALL_TEAMS.filter(t=>(picks[viewing]||[]).includes(t.id));
+      function teamPts(id) {
+        let p=0; const gr=groupResults[id];
+        if(gr==="winner")p+=SCORING.groupWinner; else if(gr==="runnerUp")p+=SCORING.groupRunnerUp; else if(gr==="third")p+=SCORING.groupThird;
+        (knockoutResults[id]||[]).forEach(r=>{p+=SCORING[r]||0;}); return p;
+      }
+      function badges(id) {
+        const gr=groupResults[id]; const kr=knockoutResults[id]||[];
+        return [gr==="winner"&&{label:"🥇 Group Winner",c:"#f59e0b"},gr==="runnerUp"&&{label:"🥈 Runner-Up",c:"#94a3b8"},gr==="third"&&{label:"3rd Advance",c:"#f97316"},kr.includes("roundOf32")&&{label:"R32 Win",c:"#3b82f6"},kr.includes("roundOf16")&&{label:"R16 Win",c:"#3b82f6"},kr.includes("quarterFinal")&&{label:"QF Win",c:"#a855f7"},kr.includes("semiFinal")&&{label:"SF Win",c:"#a855f7"},kr.includes("thirdPlace")&&{label:"3rd Place",c:"#f97316"},kr.includes("final")&&{label:"🏆 Champion",c:"#f59e0b"}].filter(Boolean);
+      }
+      return (
+        <div>
+          <div style={S.mgrtabs}>{MANAGERS.map(m=><button key={m} style={{...S.mgrtab,...(viewing===m?S.mgrtabActive:{})}} onClick={()=>setViewing(m)}>{m}</button>)}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <h3 style={{color:"#f1f5f9",margin:0}}>{viewing}'s Squad</h3>
+            <span style={{color:"#64748b",fontSize:13}}>{teams.length}/12 teams</span>
+          </div>
+          {teams.length===0?<div style={S.empty}>No picks yet</div>:(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {teams.map(t=>(
+                <div key={t.id} style={S.squadCard}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+                    <span style={{fontSize:28}}>{t.flag}</span>
+                    <div style={{flex:1}}><div style={{color:"#f1f5f9",fontWeight:700,fontSize:14}}>{t.name}</div><div style={{color:"#64748b",fontSize:12}}>Group {t.group}</div></div>
+                    <div style={{color:"#f59e0b",fontWeight:800,fontSize:20}}>{teamPts(t.id)} pts</div>
+                  </div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                    {badges(t.id).map((b,i)=><span key={i} style={{padding:"2px 8px",borderRadius:10,fontSize:11,fontWeight:600,background:"#1e293b",color:b.c,border:`1px solid ${b.c}40`}}>{b.label}</span>)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function LeaderboardTab({scores,picks,lastUpdated}) {
+      const ranked=[...MANAGERS].map(m=>({m,score:scores[m]||0,teams:(picks[m]||[]).length})).sort((a,b)=>b.score-a.score);
+      const medals=["🥇","🥈","🥉","4️⃣"];
+      return (
+        <div>
+          <h3 style={{color:"#f1f5f9",textAlign:"center",marginBottom:4}}>Fantasy Leaderboard</h3>
+          {lastUpdated&&<p style={{color:"#475569",fontSize:11,textAlign:"center",marginBottom:16}}>Scores updated {lastUpdated.toLocaleTimeString()}</p>}
+          {ranked.map((e,i)=>(
+            <div key={e.m} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:i===0?"linear-gradient(135deg,#78350f,#92400e)":"#1e293b",border:`1px solid ${i===0?"#f59e0b":"#334155"}`,borderRadius:12,marginBottom:8}}>
+              <span style={{fontSize:26}}>{medals[i]}</span>
+              <div style={{flex:1}}><div style={{color:"#f1f5f9",fontWeight:700,fontSize:17}}>{e.m}</div><div style={{color:"#64748b",fontSize:12}}>{e.teams} teams drafted</div></div>
+              <span style={{color:"#f59e0b",fontWeight:800,fontSize:24}}>{e.score}</span>
+            </div>
+          ))}
+          <div style={{marginTop:20,background:"#0f172a",borderRadius:10,padding:"12px 16px",border:"1px solid #1e293b"}}>
+            <h4 style={{color:"#94a3b8",margin:"0 0 8px"}}>Scoring Key</h4>
+            {[["Group Winner",3],["Runner-Up",2],["3rd Advance",1],["R32 Win",5],["R16 Win",8],["QF Win",12],["SF Win",18],["3rd Place Match",15],["Champion",25]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #1e293b"}}>
+                <span style={{color:"#cbd5e1",fontSize:13}}>{l}</span><span style={{color:"#f59e0b",fontWeight:700}}>{v} pts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function ScoresTab({matches,lastUpdated,onRefresh}) {
+      const live=matches.filter(m=>m.live);
+      const completed=matches.filter(m=>m.completed).slice(0,20);
+      const upcoming=matches.filter(m=>!m.live&&!m.completed).slice(0,10);
+      function MatchCard({m}) {
+        return (
+          <div style={{background:"#1e293b",border:`1px solid ${m.live?"#f59e0b":"#334155"}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:13,flex:1}}>{m.homeTeam}</span>
+              <div style={{textAlign:"center",minWidth:60}}>
+                {(m.completed||m.live)?<div style={{color:m.live?"#f59e0b":"#f1f5f9",fontWeight:800,fontSize:20}}>{m.homeScore} – {m.awayScore}</div>:<div style={{color:"#475569",fontSize:13}}>vs</div>}
+                {m.live&&<div style={{background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,display:"inline-block"}}>LIVE</div>}
+                {m.completed&&<div style={{background:"#334155",color:"#94a3b8",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,display:"inline-block"}}>FT</div>}
+              </div>
+              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:13,flex:1,textAlign:"right"}}>{m.awayTeam}</span>
+            </div>
+            {m.status&&<div style={{color:"#64748b",fontSize:11,textAlign:"center",marginTop:4}}>{m.status}</div>}
+          </div>
+        );
+      }
+      return (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+            <h3 style={{color:"#f1f5f9",margin:0}}>Live Scores</h3>
+            <button onClick={onRefresh} style={{background:"#1e293b",border:"1px solid #334155",borderRadius:6,color:"#94a3b8",fontSize:12,padding:"4px 10px",cursor:"pointer"}}>↻ Refresh</button>
+          </div>
+          {lastUpdated&&<p style={{color:"#475569",fontSize:11,marginBottom:12}}>Updated {lastUpdated.toLocaleTimeString()} · Auto-refreshes every 90s</p>}
+          {matches.length===0?(
+            <div style={S.empty}><div style={{fontSize:40,marginBottom:8}}>📅</div><p style={{color:"#94a3b8",margin:"0 0 4px"}}>No match data yet</p><p style={{color:"#475569",fontSize:13,margin:0}}>Tournament begins June 11, 2026</p></div>
+          ):(
+            <>
+              {live.length>0&&<><div style={S.sectionLabel}>🔴 Live Now</div>{live.map(m=><MatchCard key={m.id} m={m}/>)}</>}
+              {completed.length>0&&<><div style={S.sectionLabel}>✅ Recent Results</div>{completed.map(m=><MatchCard key={m.id} m={m}/>)}</>}
+              {upcoming.length>0&&<><div style={S.sectionLabel}>📅 Upcoming</div>{upcoming.map(m=><MatchCard key={m.id} m={m}/>)}</>}
+            </>
+          )}
+        </div>
+      );
+    }
+
+    function AdminTab({groupResults,knockoutResults,onSaveGR,onSaveKR,onReset,onRefresh}) {
+      const [sub,setSub]=useState("knockout");
+      const koRounds=[{key:"roundOf32",label:"Round of 32"},{key:"roundOf16",label:"Round of 16"},{key:"quarterFinal",label:"Quarterfinal"},{key:"semiFinal",label:"Semifinal"},{key:"thirdPlace",label:"3rd Place Match"},{key:"final",label:"Final (Champion)"}];
+      return (
+        <div>
+          <h3 style={{color:"#f59e0b",textAlign:"center",marginBottom:4}}>Admin Panel</h3>
+          <p style={{color:"#64748b",fontSize:12,textAlign:"center",marginBottom:12}}>Scores auto-update from ESPN. Use overrides only if ESPN data is wrong.</p>
+          <button onClick={onRefresh} style={{width:"100%",padding:"8px",background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#94a3b8",fontSize:13,cursor:"pointer",marginBottom:12}}>↻ Force Refresh ESPN Data</button>
+          <div style={{display:"flex",gap:6,marginBottom:16}}>
+            {["group","knockout","reset"].map(s=>(
+              <button key={s} style={{flex:1,padding:"8px 4px",background:sub===s?"#1e3a5f":"#1e293b",border:`1px solid ${sub===s?"#3b82f6":"#334155"}`,borderRadius:8,color:sub===s?"#f1f5f9":"#94a3b8",fontSize:12,cursor:"pointer"}} onClick={()=>setSub(s)}>
+                {s==="group"?"Group":s==="knockout"?"Knockout":"⚠️ Reset"}
+              </button>
+            ))}
+          </div>
+          {sub==="group"&&(
+            <div>
+              {"ABCDEFGHIJKL".split("").map(grp=>(
+                <div key={grp} style={{background:"#0f172a",border:"1px solid #1e293b",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{color:"#f59e0b",fontWeight:700,fontSize:13,marginBottom:8}}>Group {grp}</div>
+                  {ALL_TEAMS.filter(t=>t.group===grp).map(team=>(
+                    <div key={team.id} style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                      <span style={{fontSize:18}}>{team.flag}</span>
+                      <span style={{color:"#e2e8f0",flex:1,fontSize:13,minWidth:80}}>{team.name}</span>
+                      <div style={{display:"flex",gap:4}}>
+                        {[["winner","🥇","#f59e0b"],["runnerUp","🥈","#94a3b8"],["third","3rd","#f97316"],["clear","✕","#475569"]].map(([val,lbl,col])=>{
+                          const active=val==="clear"?!groupResults[team.id]:groupResults[team.id]===val;
+                          return <button key={val} onClick={()=>onSaveGR(team.id,val==="clear"?null:val)} style={{padding:"3px 8px",border:"none",borderRadius:5,cursor:"pointer",fontSize:11,fontWeight:600,background:active?col:"#1e293b",color:active?"#000":"#64748b"}}>{lbl}</button>;
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          {sub==="knockout"&&(
+            <div>
+              {koRounds.map(({key,label})=>(
+                <div key={key} style={{background:"#0f172a",border:"1px solid #1e293b",borderRadius:8,padding:12,marginBottom:10}}>
+                  <div style={{color:"#f59e0b",fontWeight:700,fontSize:13,marginBottom:8}}>{label}</div>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {ALL_TEAMS.map(team=>{
+                      const active=(knockoutResults[team.id]||[]).includes(key);
+                      return <button key={team.id} onClick={()=>onSaveKR(team.id,key)} style={{padding:"4px 8px",borderRadius:6,cursor:"pointer",fontSize:11,color:"#e2e8f0",fontWeight:500,background:active?"#16a34a":"#1e293b",border:`1px solid ${active?"#22c55e":"#334155"}`}}>{team.flag} {team.name}</button>;
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {sub==="reset"&&(
+            <div style={{background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:10,padding:16}}>
+              <h4 style={{color:"#dc2626",margin:"0 0 8px"}}>⚠️ Danger Zone</h4>
+              <p style={{color:"#94a3b8",fontSize:13,marginBottom:16}}>Resets the entire draft with a new randomized order. All picks permanently lost.</p>
+              <button onClick={onReset} style={{width:"100%",padding:12,background:"#dc2626",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>🔄 Reset Draft & Randomize New Order</button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
