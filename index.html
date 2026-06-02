@@ -468,6 +468,27 @@
         notify("Draft reset!", "ok");
       };
 
+      const doUndoLastPick = async () => {
+        if (pickIndex === 0) { notify("No picks to undo.", "err"); return; }
+        const lastPickNumber = pickIndex;
+        const lastSnakePick = snakePicks[pickIndex - 1];
+        if (!window.confirm(`Undo last pick? This will remove ${lastSnakePick.manager}'s most recent pick.`)) return;
+        // Delete from Supabase
+        await sbDelete("picks", `pick_number=eq.${lastPickNumber}`);
+        const newIdx = pickIndex - 1;
+        await savePickIndex(newIdx);
+        // Update local state
+        const newPicks = { ...picks };
+        const mgr = lastSnakePick.manager;
+        const mgrPicks = [...(newPicks[mgr] || [])];
+        mgrPicks.pop();
+        newPicks[mgr] = mgrPicks;
+        setPicks(newPicks);
+        setPickIndex(newIdx);
+        setDraftDone(false);
+        notify(`Last pick by ${mgr} has been undone.`, "ok");
+      };
+
       if (view==="loading") return (
         <div style={S.splash}>
           <div style={{fontSize:56}}>⚽</div>
@@ -541,7 +562,7 @@
             {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults}/>}
             {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated}/>}
             {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN}/>}
-            {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onRefresh={refreshESPN}/>}
+            {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onUndo={doUndoLastPick} onRefresh={refreshESPN} picks={picks} snakePicks={snakePicks} pickIndex={pickIndex}/>}
           </div>
         </div>
       );
@@ -549,11 +570,34 @@
 
     function DraftTab({snakePicks,pickIndex,curPick,currentManager,picks,allPicked,draftDone,draftOrder,onPick,saving}) {
       const [grpFilter,setGrpFilter]=useState("All");
+      const [pendingTeam,setPendingTeam]=useState(null);
       const myPicks=picks[currentManager]||[];
       const isMyTurn=!draftDone&&curPick?.manager===currentManager;
       const filtered=ALL_TEAMS.filter(t=>grpFilter==="All"||t.group===grpFilter);
+
+      function handleTeamClick(team) {
+        if (!isMyTurn || saving) return;
+        setPendingTeam(team);
+      }
+
+      function confirmPick() {
+        if (pendingTeam) { onPick(pendingTeam.id); setPendingTeam(null); }
+      }
       return (
         <div>
+          {pendingTeam && (
+            <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+              <div style={{background:"#1e293b",borderRadius:16,padding:24,border:"1px solid #334155",maxWidth:320,width:"100%",textAlign:"center"}}>
+                <div style={{fontSize:48,marginBottom:8}}>{pendingTeam.flag}</div>
+                <h3 style={{color:"#f1f5f9",fontSize:20,fontWeight:800,marginBottom:4}}>{pendingTeam.name}</h3>
+                <p style={{color:"#64748b",fontSize:13,marginBottom:20}}>Group {pendingTeam.group} · Confirm this pick?</p>
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={()=>setPendingTeam(null)} style={{flex:1,padding:"12px",background:"#0f172a",border:"1px solid #334155",borderRadius:10,color:"#94a3b8",fontSize:15,fontWeight:700,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={confirmPick} style={{flex:1,padding:"12px",background:"#16a34a",border:"none",borderRadius:10,color:"#fff",fontSize:15,fontWeight:700,cursor:"pointer"}}>✓ Draft</button>
+                </div>
+              </div>
+            </div>
+          )}
           {draftDone?(
             <div style={S.completeBanner}><div style={{fontSize:48}}>🏆</div><h2 style={{color:"#f59e0b",margin:"8px 0 4px"}}>Draft Complete!</h2><p style={{color:"#94a3b8",margin:0}}>All 48 teams drafted. Good luck!</p></div>
           ):(
@@ -587,7 +631,7 @@
               const mine=myPicks.includes(team.id);
               const canClick=isMyTurn&&!picked&&!saving;
               return (
-                <button key={team.id} disabled={!canClick} onClick={()=>canClick&&onPick(team.id)} style={{...S.teamCard,...(picked&&!mine?S.teamPicked:{}),...(mine?S.teamMine:{}),...(canClick?S.teamAvail:{})}}>
+                <button key={team.id} disabled={!canClick} onClick={()=>canClick&&handleTeamClick(team)} style={{...S.teamCard,...(picked&&!mine?S.teamPicked:{}),...(mine?S.teamMine:{}),...(canClick?S.teamAvail:{})}}>
                   <span style={{fontSize:26}}>{team.flag}</span>
                   <span style={{color:"#e2e8f0",fontSize:11,fontWeight:600,textAlign:"center",lineHeight:1.3}}>{team.name}</span>
                   <span style={{color:"#475569",fontSize:10}}>Grp {team.group}</span>
@@ -705,9 +749,12 @@
       );
     }
 
-    function AdminTab({groupResults,knockoutResults,onSaveGR,onSaveKR,onReset,onRefresh}) {
+    function AdminTab({groupResults,knockoutResults,onSaveGR,onSaveKR,onReset,onUndo,onRefresh,picks,snakePicks,pickIndex}) {
       const [sub,setSub]=useState("knockout");
       const koRounds=[{key:"roundOf32",label:"Round of 32"},{key:"roundOf16",label:"Round of 16"},{key:"quarterFinal",label:"Quarterfinal"},{key:"semiFinal",label:"Semifinal"},{key:"thirdPlace",label:"3rd Place Match"},{key:"final",label:"Final (Champion)"}];
+      const lastPick = pickIndex > 0 ? snakePicks[pickIndex-1] : null;
+      const lastTeamId = lastPick ? (picks[lastPick.manager]||[]).slice(-1)[0] : null;
+      const lastTeam = lastTeamId ? ALL_TEAMS.find(t=>t.id===lastTeamId) : null;
       return (
         <div>
           <h3 style={{color:"#f59e0b",textAlign:"center",marginBottom:4}}>Admin Panel</h3>
@@ -757,10 +804,23 @@
             </div>
           )}
           {sub==="reset"&&(
-            <div style={{background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:10,padding:16}}>
-              <h4 style={{color:"#dc2626",margin:"0 0 8px"}}>⚠️ Danger Zone</h4>
-              <p style={{color:"#94a3b8",fontSize:13,marginBottom:16}}>Resets the entire draft with a new randomized order. All picks permanently lost.</p>
-              <button onClick={onReset} style={{width:"100%",padding:12,background:"#dc2626",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>🔄 Reset Draft & Randomize New Order</button>
+            <div>
+              <div style={{background:"#0c1a2e",border:"1px solid #1e3a5f",borderRadius:10,padding:16,marginBottom:12}}>
+                <h4 style={{color:"#f59e0b",margin:"0 0 8px"}}>↩ Undo Last Pick</h4>
+                {lastPick && lastTeam ? (
+                  <>
+                    <p style={{color:"#94a3b8",fontSize:13,marginBottom:12}}>Last pick: <strong style={{color:"#f1f5f9"}}>{lastTeam.flag} {lastTeam.name}</strong> by <strong style={{color:"#f1f5f9"}}>{lastPick.manager}</strong> (Pick #{pickIndex})</p>
+                    <button onClick={onUndo} style={{width:"100%",padding:12,background:"#1e40af",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>↩ Undo This Pick</button>
+                  </>
+                ) : (
+                  <p style={{color:"#475569",fontSize:13}}>No picks to undo.</p>
+                )}
+              </div>
+              <div style={{background:"#1c0a0a",border:"1px solid #7f1d1d",borderRadius:10,padding:16}}>
+                <h4 style={{color:"#dc2626",margin:"0 0 8px"}}>⚠️ Danger Zone</h4>
+                <p style={{color:"#94a3b8",fontSize:13,marginBottom:16}}>Resets the entire draft with a new randomized order. All picks permanently lost.</p>
+                <button onClick={onReset} style={{width:"100%",padding:12,background:"#dc2626",border:"none",borderRadius:8,color:"#fff",fontWeight:700,fontSize:14,cursor:"pointer"}}>🔄 Reset Draft & Randomize New Order</button>
+              </div>
             </div>
           )}
         </div>
