@@ -65,9 +65,10 @@
     const TOTAL_ROUNDS = 12;
 
     const SCORING = {
-      groupWinner: 3, groupRunnerUp: 2, groupThird: 1,
-      roundOf32: 5, roundOf16: 8, quarterFinal: 12,
-      semiFinal: 18, thirdPlace: 15, final: 25,
+      groupWin: 3, groupDraw: 1,
+      groupWinner: 2, groupRunnerUp: 1, groupThird: 0,
+      roundOf32: 6, roundOf16: 10, quarterFinal: 15,
+      semiFinal: 20, thirdPlace: 15, final: 25,
     };
 
     const ESPN_NAME_MAP = {
@@ -245,8 +246,12 @@
         const an = away?.team?.displayName || away?.team?.name || "";
         const notes = comp?.notes?.[0]?.headline || ev.name || "";
         const isKnockout = ev.season?.type === 3 || ["round of","quarter","semi","final"].some(k => notes.toLowerCase().includes(k));
-        return { id: ev.id, homeTeam: hn, awayTeam: an, homeId: resolveTeamId(hn), awayId: resolveTeamId(an), homeScore: parseInt(home?.score || "0"), awayScore: parseInt(away?.score || "0"), completed: sn === "STATUS_FINAL", live: sn === "STATUS_IN_PROGRESS", isKnockout, notes, status: comp?.status?.type?.shortDetail || "" };
-      });
+        const dateStr = ev.date || comp?.date || "";
+        const dateObj = dateStr ? new Date(dateStr) : null;
+        const displayDate = dateObj ? dateObj.toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
+        const displayTime = dateObj ? dateObj.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : "";
+        return { id: ev.id, homeTeam: hn, awayTeam: an, homeId: resolveTeamId(hn), awayId: resolveTeamId(an), homeScore: parseInt(home?.score || "0"), awayScore: parseInt(away?.score || "0"), completed: sn === "STATUS_FINAL", live: sn === "STATUS_IN_PROGRESS", isKnockout, notes, status: comp?.status?.type?.shortDetail || "", displayDate, displayTime, dateObj };
+      }).sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
     }
 
     function computeGroupStandings(matches) {
@@ -294,21 +299,41 @@
       return kr;
     }
 
-    function calcScores(picks, gr, kr) {
+    function calcScores(picks, gr, kr, matches) {
       const scores = {};
       MANAGERS.forEach(m => scores[m] = 0);
       const t2m = {};
       Object.entries(picks).forEach(([mgr, ids]) => ids.forEach(id => t2m[id] = mgr));
+
+      // Per-game group stage points
+      (matches || []).forEach(m => {
+        if (!m.completed || m.isKnockout || !m.homeId || !m.awayId) return;
+        const homeMgr = t2m[m.homeId];
+        const awayMgr = t2m[m.awayId];
+        if (m.homeScore > m.awayScore) {
+          if (homeMgr) scores[homeMgr] += SCORING.groupWin;
+        } else if (m.homeScore < m.awayScore) {
+          if (awayMgr) scores[awayMgr] += SCORING.groupWin;
+        } else {
+          if (homeMgr) scores[homeMgr] += SCORING.groupDraw;
+          if (awayMgr) scores[awayMgr] += SCORING.groupDraw;
+        }
+      });
+
+      // Group finishing bonus
       Object.entries(gr).forEach(([tid, res]) => {
         const mgr = t2m[parseInt(tid)]; if (!mgr || !res) return;
         if (res==="winner") scores[mgr]+=SCORING.groupWinner;
         else if (res==="runnerUp") scores[mgr]+=SCORING.groupRunnerUp;
-        else if (res==="third") scores[mgr]+=SCORING.groupThird;
+        // no points for third place advance
       });
+
+      // Knockout points
       Object.entries(kr).forEach(([tid, rounds]) => {
         const mgr = t2m[parseInt(tid)]; if (!mgr||!Array.isArray(rounds)) return;
         rounds.forEach(r => { scores[mgr]+=SCORING[r]||0; });
       });
+
       return scores;
     }
 
@@ -433,7 +458,7 @@
       }, []);
 
       useEffect(() => { refreshESPN(); const t = setInterval(refreshESPN, 90000); return () => clearInterval(t); }, [refreshESPN]);
-      useEffect(() => { if (draftOrder.length) setScores(calcScores(picks, groupResults, knockoutResults)); }, [picks, draftOrder, groupResults, knockoutResults]);
+      useEffect(() => { if (draftOrder.length) setScores(calcScores(picks, groupResults, knockoutResults, matches)); }, [picks, draftOrder, groupResults, knockoutResults, matches]);
 
       const doPick = useCallback(async (teamId) => {
         if (!currentManager || saving) return;
@@ -528,7 +553,7 @@
             <button style={S.scoreToggle} onClick={()=>setScoringOpen(v=>!v)}>📊 Scoring System {scoringOpen?"▲":"▼"}</button>
             {scoringOpen && (
               <div style={{padding:"0 16px 16px"}}>
-                {[["Group Winner","3 pts"],["Group Runner-Up","2 pts"],["3rd Place Advance","1 pt"],["Round of 32 Win","5 pts"],["Round of 16 Win","8 pts"],["Quarterfinal Win","12 pts"],["Semifinal Win","18 pts"],["3rd Place Match Win","15 pts"],["Final / Champion","25 pts"]].map(([l,v])=>(
+                {[["Group Win","3 pts"],["Group Draw","1 pt"],["Group Winner Bonus","+2 pts"],["Group Runner-Up Bonus","+1 pt"],["Round of 32 Win","6 pts"],["Round of 16 Win","10 pts"],["Quarterfinal Win","15 pts"],["Semifinal Win","20 pts"],["3rd Place Match Win","15 pts"],["Final / Champion","25 pts"]].map(([l,v])=>(
                   <div key={l} style={S.scoreRow}><span style={{color:"#cbd5e1",fontSize:13}}>{l}</span><span style={{color:"#f59e0b",fontWeight:700}}>{v}</span></div>
                 ))}
               </div>
@@ -561,7 +586,7 @@
             {tab==="draft" && <DraftTab snakePicks={snakePicks} pickIndex={pickIndex} curPick={curPick} currentManager={currentManager} picks={picks} allPicked={allPicked} draftDone={draftDone} draftOrder={draftOrder} onPick={doPick} saving={saving}/>}
             {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults}/>}
             {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated}/>}
-            {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN}/>}
+            {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN} picks={picks}/>}
             {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onUndo={doUndoLastPick} onRefresh={refreshESPN} picks={picks} snakePicks={snakePicks} pickIndex={pickIndex}/>}
           </div>
         </div>
@@ -699,7 +724,7 @@
           ))}
           <div style={{marginTop:20,background:"#0f172a",borderRadius:10,padding:"12px 16px",border:"1px solid #1e293b"}}>
             <h4 style={{color:"#94a3b8",margin:"0 0 8px"}}>Scoring Key</h4>
-            {[["Group Winner",3],["Runner-Up",2],["3rd Advance",1],["R32 Win",5],["R16 Win",8],["QF Win",12],["SF Win",18],["3rd Place Match",15],["Champion",25]].map(([l,v])=>(
+            {[["Group Win",3],["Group Draw",1],["Group Winner Bonus",2],["Runner-Up Bonus",1],["R32 Win",6],["R16 Win",10],["QF Win",15],["SF Win",20],["3rd Place Match",15],["Champion",25]].map(([l,v])=>(
               <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"3px 0",borderBottom:"1px solid #1e293b"}}>
                 <span style={{color:"#cbd5e1",fontSize:13}}>{l}</span><span style={{color:"#f59e0b",fontWeight:700}}>{v} pts</span>
               </div>
@@ -709,41 +734,78 @@
       );
     }
 
-    function ScoresTab({matches,lastUpdated,onRefresh}) {
+    function ScoresTab({matches,lastUpdated,onRefresh,picks}) {
+      const [filter, setFilter] = useState("all");
       const live=matches.filter(m=>m.live);
-      const completed=matches.filter(m=>m.completed).slice(0,20);
-      const upcoming=matches.filter(m=>!m.live&&!m.completed).slice(0,10);
+      const completed=matches.filter(m=>m.completed);
+      const upcoming=matches.filter(m=>!m.live&&!m.completed);
+
+      // Build teamId -> manager lookup
+      const t2m = {};
+      Object.entries(picks||{}).forEach(([mgr,ids]) => ids.forEach(id => t2m[id]=mgr));
+
+      function teamLabel(teamName, teamId) {
+        const mgr = t2m[teamId];
+        return mgr ? `${teamName} (${mgr})` : teamName;
+      }
+
+      // Filter matches based on tab
+      const filtered = filter === "live" ? live : filter === "completed" ? completed : filter === "upcoming" ? upcoming : matches;
+
+      // Group by date
+      const byDate = {};
+      filtered.forEach(m => {
+        const key = m.displayDate || "TBD";
+        if (!byDate[key]) byDate[key] = [];
+        byDate[key].push(m);
+      });
+
       function MatchCard({m}) {
         return (
           <div style={{background:"#1e293b",border:`1px solid ${m.live?"#f59e0b":"#334155"}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:13,flex:1}}>{m.homeTeam}</span>
-              <div style={{textAlign:"center",minWidth:60}}>
-                {(m.completed||m.live)?<div style={{color:m.live?"#f59e0b":"#f1f5f9",fontWeight:800,fontSize:20}}>{m.homeScore} – {m.awayScore}</div>:<div style={{color:"#475569",fontSize:13}}>vs</div>}
-                {m.live&&<div style={{background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,display:"inline-block"}}>LIVE</div>}
+              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:12,flex:1,lineHeight:1.3}}>{teamLabel(m.homeTeam, m.homeId)}</span>
+              <div style={{textAlign:"center",minWidth:56,flexShrink:0}}>
+                {m.live && <div style={{background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,marginBottom:2,display:"inline-block"}}>LIVE</div>}
+                {(m.completed||m.live)
+                  ? <div style={{color:m.live?"#f59e0b":"#f1f5f9",fontWeight:800,fontSize:20}}>{m.homeScore} – {m.awayScore}</div>
+                  : <div style={{color:"#64748b",fontSize:12,fontWeight:600}}>{m.displayTime||"TBD"}</div>
+                }
                 {m.completed&&<div style={{background:"#334155",color:"#94a3b8",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,display:"inline-block"}}>FT</div>}
               </div>
-              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:13,flex:1,textAlign:"right"}}>{m.awayTeam}</span>
+              <span style={{color:"#f1f5f9",fontWeight:600,fontSize:12,flex:1,textAlign:"right",lineHeight:1.3}}>{teamLabel(m.awayTeam, m.awayId)}</span>
             </div>
-            {m.status&&<div style={{color:"#64748b",fontSize:11,textAlign:"center",marginTop:4}}>{m.status}</div>}
+            {m.live && m.status && <div style={{color:"#f59e0b",fontSize:11,textAlign:"center",marginTop:4}}>{m.status}</div>}
           </div>
         );
       }
       return (
         <div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-            <h3 style={{color:"#f1f5f9",margin:0}}>Live Scores</h3>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <h3 style={{color:"#f1f5f9",margin:0}}>Schedule & Scores</h3>
             <button onClick={onRefresh} style={{background:"#1e293b",border:"1px solid #334155",borderRadius:6,color:"#94a3b8",fontSize:12,padding:"4px 10px",cursor:"pointer"}}>↻ Refresh</button>
           </div>
-          {lastUpdated&&<p style={{color:"#475569",fontSize:11,marginBottom:12}}>Updated {lastUpdated.toLocaleTimeString()} · Auto-refreshes every 90s</p>}
-          {matches.length===0?(
-            <div style={S.empty}><div style={{fontSize:40,marginBottom:8}}>📅</div><p style={{color:"#94a3b8",margin:"0 0 4px"}}>No match data yet</p><p style={{color:"#475569",fontSize:13,margin:0}}>Tournament begins June 11, 2026</p></div>
-          ):(
-            <>
-              {live.length>0&&<><div style={S.sectionLabel}>🔴 Live Now</div>{live.map(m=><MatchCard key={m.id} m={m}/>)}</>}
-              {completed.length>0&&<><div style={S.sectionLabel}>✅ Recent Results</div>{completed.map(m=><MatchCard key={m.id} m={m}/>)}</>}
-              {upcoming.length>0&&<><div style={S.sectionLabel}>📅 Upcoming</div>{upcoming.map(m=><MatchCard key={m.id} m={m}/>)}</>}
-            </>
+          {lastUpdated&&<p style={{color:"#475569",fontSize:11,marginBottom:8}}>Updated {lastUpdated.toLocaleTimeString()} · Auto-refreshes every 90s</p>}
+
+          <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto"}}>
+            {[["all","All"],["live","🔴 Live"],["upcoming","📅 Upcoming"],["completed","✅ Results"]].map(([val,lbl])=>(
+              <button key={val} onClick={()=>setFilter(val)} style={{padding:"5px 12px",background:filter===val?"#f59e0b":"#1e293b",border:`1px solid ${filter===val?"#f59e0b":"#334155"}`,borderRadius:20,color:filter===val?"#000":"#94a3b8",fontSize:12,fontWeight:filter===val?700:400,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                {lbl} {val==="live"&&live.length>0?`(${live.length})`:""}
+              </button>
+            ))}
+          </div>
+
+          {matches.length===0 ? (
+            <div style={S.empty}><div style={{fontSize:40,marginBottom:8}}>📅</div><p style={{color:"#94a3b8",margin:"0 0 4px"}}>Loading schedule...</p><p style={{color:"#475569",fontSize:13,margin:0}}>Tournament begins June 11, 2026</p></div>
+          ) : filtered.length===0 ? (
+            <div style={S.empty}><p style={{color:"#475569"}}>No matches in this category yet.</p></div>
+          ) : (
+            Object.entries(byDate).map(([date, dayMatches]) => (
+              <div key={date}>
+                <div style={{color:"#f59e0b",fontWeight:700,fontSize:13,marginBottom:8,marginTop:4,paddingBottom:4,borderBottom:"1px solid #1e293b"}}>{date}</div>
+                {dayMatches.map(m => <MatchCard key={m.id} m={m}/>)}
+              </div>
+            ))
           )}
         </div>
       );
