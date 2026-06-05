@@ -212,9 +212,113 @@
     }
 
     // ============================================================
-    // ESPN
+    // HARDCODED SCHEDULE — all 48 group stage games
+    // Live scores from ESPN overlay on top when available
     // ============================================================
-    const PROXY = "https://corsproxy.io/?";
+    const SCHEDULE = [
+      // Group A
+      {id:"a1",homeTeam:"Mexico",awayTeam:"South Africa",date:"2026-06-11",time:"9:00 PM",group:"A"},
+      {id:"a2",homeTeam:"South Korea",awayTeam:"Czechia",date:"2026-06-12",time:"3:00 PM",group:"A"},
+      {id:"a3",homeTeam:"Mexico",awayTeam:"Czechia",date:"2026-06-16",time:"3:00 PM",group:"A"},
+      {id:"a4",homeTeam:"South Africa",awayTeam:"South Korea",date:"2026-06-16",time:"6:00 PM",group:"A"},
+      {id:"a5",homeTeam:"Mexico",awayTeam:"South Korea",date:"2026-06-20",time:"6:00 PM",group:"A"},
+      {id:"a6",homeTeam:"Czechia",awayTeam:"South Africa",date:"2026-06-20",time:"6:00 PM",group:"A"},
+      // Group B
+      {id:"b1",homeTeam:"Canada",awayTeam:"Bosnia-Herz.",date:"2026-06-12",time:"6:00 PM",group:"B"},
+      {id:"b2",homeTeam:"Qatar",awayTeam:"Switzerland",date:"2026-06-12",time:"9:00 PM",group:"B"},
+      {id:"b3",homeTeam:"Canada",awayTeam:"Switzerland",date:"2026-06-16",time:"9:00 PM",group:"B"},
+      {id:"b4",homeTeam:"Bosnia-Herz.",awayTeam:"Qatar",date:"2026-06-17",time:"3:00 PM",group:"B"},
+      {id:"b5",homeTeam:"Canada",awayTeam:"Qatar",date:"2026-06-21",time:"6:00 PM",group:"B"},
+      {id:"b6",homeTeam:"Switzerland",awayTeam:"Bosnia-Herz.",date:"2026-06-21",time:"6:00 PM",group:"B"},
+      // Group C
+      {id:"c1",homeTeam:"Brazil",awayTeam:"Morocco",date:"2026-06-13",time:"3:00 PM",group:"C"},
+      {id:"c2",homeTeam:"Haiti",awayTeam:"Scotland",date:"2026-06-13",time:"6:00 PM",group:"C"},
+      {id:"c3",homeTeam:"Brazil",awayTeam:"Scotland",date:"2026-06-17",time:"6:00 PM",group:"C"},
+      {id:"c4",homeTeam:"Morocco",awayTeam:"Haiti",date:"2026-06-17",time:"9:00 PM",group:"C"},
+      {id:"c5",homeTeam:"Brazil",awayTeam:"Haiti",date:"2026-06-21",time:"9:00 PM",group:"C"},
+      {id:"c6",homeTeam:"Scotland",awayTeam:"Morocco",date:"2026-06-21",time:"9:00 PM",group:"C"},
+      // Group D
+      {id:"d1",homeTeam:"USA",awayTeam:"Paraguay",date:"2026-06-12",time:"12:00 PM",group:"D"},
+      {id:"d2",homeTeam:"Australia",awayTeam:"Türkiye",date:"2026-06-13",time:"12:00 PM",group:"D"},
+      {id:"d3",homeTeam:"USA",awayTeam:"Türkiye",date:"2026-06-17",time:"12:00 PM",group:"D"},
+      {id:"d4",homeTeam:"Paraguay",awayTeam:"Australia",date:"2026-06-18",time:"3:00 PM",group:"D"},
+      {id:"d5",homeTeam:"USA",awayTeam:"Australia",date:"2026-06-22",time:"6:00 PM",group:"D"},
+      {id:"d6",homeTeam:"Türkiye",awayTeam:"Paraguay",date:"2026-06-22",time:"6:00 PM",group:"D"},
+      // Group E
+      {id:"e1",homeTeam:"Germany",awayTeam:"Curaçao",date:"2026-06-13",time:"9:00 PM",group:"E"},
+      {id:"e2",homeTeam:"Ivory Coast",awayTeam:"Ecuador",date:"2026-06-14",time:"3:00 PM",group:"E"},
+      {id:"e3",homeTeam:"Germany",awayTeam:"Ecuador",date:"2026-06-18",time:"6:00 PM",group:"E"},
+      {id:"e4",homeTeam:"Curaçao",awayTeam:"Ivory Coast",date:"2026-06-18",time:"9:00 PM",group:"E"},
+      {id:"e5",homeTeam:"Germany",awayTeam:"Ivory Coast",date:"2026-06-22",time:"9:00 PM",group:"E"},
+      {id:"e6",homeTeam:"Ecuador",awayTeam:"Curaçao",date:"2026-06-22",time:"9:00 PM",group:"E"},
+      // Group F
+      {id:"f1",homeTeam:"Netherlands",awayTeam:"Japan",date:"2026-06-14",time:"6:00 PM",group:"F"},
+      {id:"f2",homeTeam:"Sweden",awayTeam:"Tunisia",date:"2026-06-14",time:"9:00 PM",group:"F"},
+      {id:"f3",homeTeam:"Netherlands",awayTeam:"Tunisia",date:"2026-06-18",time:"12:00 PM",group:"F"},
+      {id:"f4",homeTeam:"Japan",awayTeam:"Sweden",date:"2026-06-19",time:"3:00 PM",group:"F"},
+      {id:"f5",homeTeam:"Netherlands",awayTeam:"Sweden",date:"2026-06-23",time:"6:00 PM",group:"F"},
+      {id:"f6",homeTeam:"Tunisia",awayTeam:"Japan",date:"2026-06-23",time:"6:00 PM",group:"F"},
+      // Group G
+      {id:"g1",homeTeam:"Belgium",awayTeam:"Egypt",date:"2026-06-15",time:"3:00 PM",group:"G"},
+      {id:"g2",homeTeam:"Iran",awayTeam:"New Zealand",date:"2026-06-15",time:"6:00 PM",group:"G"},
+      {id:"g3",homeTeam:"Belgium",awayTeam:"New Zealand",date:"2026-06-19",time:"6:00 PM",group:"G"},
+      {id:"g4",homeTeam:"Egypt",awayTeam:"Iran",date:"2026-06-19",time:"9:00 PM",group:"G"},
+      {id:"g5",homeTeam:"Belgium",awayTeam:"Iran",date:"2026-06-23",time:"9:00 PM",group:"G"},
+      {id:"g6",homeTeam:"New Zealand",awayTeam:"Egypt",date:"2026-06-23",time:"9:00 PM",group:"G"},
+      // Group H
+      {id:"h1",homeTeam:"Spain",awayTeam:"Cape Verde",date:"2026-06-15",time:"9:00 PM",group:"H"},
+      {id:"h2",homeTeam:"Saudi Arabia",awayTeam:"Uruguay",date:"2026-06-16",time:"12:00 PM",group:"H"},
+      {id:"h3",homeTeam:"Spain",awayTeam:"Uruguay",date:"2026-06-20",time:"12:00 PM",group:"H"},
+      {id:"h4",homeTeam:"Cape Verde",awayTeam:"Saudi Arabia",date:"2026-06-20",time:"3:00 PM",group:"H"},
+      {id:"h5",homeTeam:"Spain",awayTeam:"Saudi Arabia",date:"2026-06-24",time:"6:00 PM",group:"H"},
+      {id:"h6",homeTeam:"Uruguay",awayTeam:"Cape Verde",date:"2026-06-24",time:"6:00 PM",group:"H"},
+      // Group I
+      {id:"i1",homeTeam:"France",awayTeam:"Senegal",date:"2026-06-16",time:"9:00 PM",group:"I"},
+      {id:"i2",homeTeam:"Iraq",awayTeam:"Norway",date:"2026-06-17",time:"6:00 PM",group:"I"},
+      {id:"i3",homeTeam:"France",awayTeam:"Norway",date:"2026-06-21",time:"3:00 PM",group:"I"},
+      {id:"i4",homeTeam:"Senegal",awayTeam:"Iraq",date:"2026-06-21",time:"12:00 PM",group:"I"},
+      {id:"i5",homeTeam:"France",awayTeam:"Iraq",date:"2026-06-25",time:"6:00 PM",group:"I"},
+      {id:"i6",homeTeam:"Norway",awayTeam:"Senegal",date:"2026-06-25",time:"6:00 PM",group:"I"},
+      // Group J
+      {id:"j1",homeTeam:"Argentina",awayTeam:"Algeria",date:"2026-06-17",time:"9:00 PM",group:"J"},
+      {id:"j2",homeTeam:"Austria",awayTeam:"Jordan",date:"2026-06-18",time:"3:00 PM",group:"J"},
+      {id:"j3",homeTeam:"Argentina",awayTeam:"Jordan",date:"2026-06-22",time:"3:00 PM",group:"J"},
+      {id:"j4",homeTeam:"Algeria",awayTeam:"Austria",date:"2026-06-22",time:"12:00 PM",group:"J"},
+      {id:"j5",homeTeam:"Argentina",awayTeam:"Austria",date:"2026-06-25",time:"9:00 PM",group:"J"},
+      {id:"j6",homeTeam:"Jordan",awayTeam:"Algeria",date:"2026-06-25",time:"9:00 PM",group:"J"},
+      // Group K
+      {id:"k1",homeTeam:"Portugal",awayTeam:"DR Congo",date:"2026-06-18",time:"12:00 PM",group:"K"},
+      {id:"k2",homeTeam:"Uzbekistan",awayTeam:"Colombia",date:"2026-06-19",time:"6:00 PM",group:"K"},
+      {id:"k3",homeTeam:"Portugal",awayTeam:"Colombia",date:"2026-06-22",time:"9:00 PM",group:"K"},
+      {id:"k4",homeTeam:"DR Congo",awayTeam:"Uzbekistan",date:"2026-06-23",time:"3:00 PM",group:"K"},
+      {id:"k5",homeTeam:"Portugal",awayTeam:"Uzbekistan",date:"2026-06-26",time:"6:00 PM",group:"K"},
+      {id:"k6",homeTeam:"Colombia",awayTeam:"DR Congo",date:"2026-06-26",time:"6:00 PM",group:"K"},
+      // Group L
+      {id:"l1",homeTeam:"England",awayTeam:"Croatia",date:"2026-06-19",time:"12:00 PM",group:"L"},
+      {id:"l2",homeTeam:"Ghana",awayTeam:"Panama",date:"2026-06-19",time:"9:00 PM",group:"L"},
+      {id:"l3",homeTeam:"England",awayTeam:"Panama",date:"2026-06-23",time:"12:00 PM",group:"L"},
+      {id:"l4",homeTeam:"Croatia",awayTeam:"Ghana",date:"2026-06-24",time:"3:00 PM",group:"L"},
+      {id:"l5",homeTeam:"England",awayTeam:"Ghana",date:"2026-06-26",time:"9:00 PM",group:"L"},
+      {id:"l6",homeTeam:"Panama",awayTeam:"Croatia",date:"2026-06-26",time:"9:00 PM",group:"L"},
+    ];
+
+    function buildStaticMatches() {
+      const now = new Date();
+      return SCHEDULE.map(g => {
+        const homeId = resolveTeamId(g.homeTeam);
+        const awayId = resolveTeamId(g.awayTeam);
+        const dateObj = new Date(`${g.date}T00:00:00`);
+        const displayDate = dateObj.toLocaleDateString("en-US",{month:"short",day:"numeric",weekday:"short"});
+        return {
+          id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam,
+          homeId, awayId, homeScore: 0, awayScore: 0,
+          completed: false, live: false, isKnockout: false,
+          notes: `Group ${g.group}`, status: g.time,
+          displayDate, displayTime: g.time, dateObj, group: g.group,
+        };
+      }).sort((a,b) => a.dateObj - b.dateObj);
+    }
+
     const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world";
 
     function resolveTeamId(name) {
@@ -227,7 +331,6 @@
     }
 
     async function fetchESPN() {
-      // Fetch across multiple date ranges to get full tournament schedule
       const urls = [
         `${ESPN_BASE}/scoreboard?limit=100&dates=20260611-20260620`,
         `${ESPN_BASE}/scoreboard?limit=100&dates=20260621-20260630`,
@@ -236,7 +339,7 @@
       ];
       const all = [];
       for (const url of urls) {
-        try { const r = await fetch(PROXY + encodeURIComponent(url)); if (r.ok) { const d = await r.json(); if (d?.events) all.push(...d.events); } } catch {}
+        try { const r = await fetch(url); if (r.ok) { const d = await r.json(); if (d?.events) all.push(...d.events); } } catch {}
       }
       const seen = new Set();
       return all.filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
@@ -251,7 +354,8 @@
         const hn = home?.team?.displayName || home?.team?.name || "";
         const an = away?.team?.displayName || away?.team?.name || "";
         const notes = comp?.notes?.[0]?.headline || ev.name || "";
-        const isKnockout = ev.season?.type === 3 || ["round of","quarter","semi","final"].some(k => notes.toLowerCase().includes(k));
+        const slug = ev.season?.slug || "";
+        const isKnockout = slug.includes("round") || slug.includes("quarter") || slug.includes("semi") || slug.includes("final") || slug.includes("third") || ["round of","quarter","semi","final"].some(k => notes.toLowerCase().includes(k));
         const dateStr = ev.date || comp?.date || "";
         const dateObj = dateStr ? new Date(dateStr) : null;
         const displayDate = dateObj ? dateObj.toLocaleDateString("en-US",{month:"short",day:"numeric"}) : "";
@@ -449,17 +553,44 @@
       }, [view]);
 
       const refreshESPN = useCallback(async () => {
+        // Always start with the hardcoded schedule so something shows
+        const staticMatches = buildStaticMatches();
+
+        // Try ESPN for live scores on top
         const events = await fetchESPN();
-        if (!events || events.length === 0) return;
-        const parsed = parseMatches(events);
-        setMatches(parsed);
-        const autoGR = computeGroupStandings(parsed);
-        const autoKR = computeKnockoutResults(parsed);
-        if (Object.keys(autoGR).length > 0 || Object.keys(autoKR).length > 0) {
-          setGroupResults(autoGR); setKnockoutResults(autoKR);
-          await saveKnockoutResults(autoKR);
-          Object.entries(autoGR).forEach(([tid, res]) => saveGroupResult(parseInt(tid), res));
+        if (events && events.length > 0) {
+          const liveMatches = parseMatches(events);
+          // Merge: replace static entries with live data where available
+          const liveByTeams = {};
+          liveMatches.forEach(m => {
+            if (m.homeId && m.awayId) {
+              const key = [m.homeId, m.awayId].sort().join("-");
+              liveByTeams[key] = m;
+            }
+          });
+          const merged = staticMatches.map(m => {
+            if (!m.homeId || !m.awayId) return m;
+            const key = [m.homeId, m.awayId].sort().join("-");
+            return liveByTeams[key] || m;
+          });
+          // Add knockout matches from ESPN that aren't in static schedule
+          liveMatches.filter(m => m.isKnockout).forEach(m => {
+            merged.push(m);
+          });
+          merged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
+          setMatches(merged);
+
+          const autoGR = computeGroupStandings(merged);
+          const autoKR = computeKnockoutResults(merged);
+          if (Object.keys(autoGR).length > 0 || Object.keys(autoKR).length > 0) {
+            setGroupResults(autoGR); setKnockoutResults(autoKR);
+            await saveKnockoutResults(autoKR);
+            Object.entries(autoGR).forEach(([tid, res]) => saveGroupResult(parseInt(tid), res));
+          }
           setLastUpdated(new Date());
+        } else {
+          // ESPN unavailable — just use static schedule
+          setMatches(staticMatches);
         }
       }, []);
 
