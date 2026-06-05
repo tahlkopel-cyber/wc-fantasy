@@ -227,7 +227,13 @@
     }
 
     async function fetchESPN() {
-      const urls = [`${ESPN_BASE}/scoreboard`, `${ESPN_BASE}/scoreboard?limit=100&dates=20260611-20260630`, `${ESPN_BASE}/scoreboard?limit=100&dates=20260701-20260720`];
+      // Fetch across multiple date ranges to get full tournament schedule
+      const urls = [
+        `${ESPN_BASE}/scoreboard?limit=100&dates=20260611-20260620`,
+        `${ESPN_BASE}/scoreboard?limit=100&dates=20260621-20260630`,
+        `${ESPN_BASE}/scoreboard?limit=100&dates=20260701-20260710`,
+        `${ESPN_BASE}/scoreboard?limit=100&dates=20260711-20260720`,
+      ];
       const all = [];
       for (const url of urls) {
         try { const r = await fetch(PROXY + encodeURIComponent(url)); if (r.ok) { const d = await r.json(); if (d?.events) all.push(...d.events); } } catch {}
@@ -796,7 +802,12 @@
           </div>
 
           {matches.length===0 ? (
-            <div style={S.empty}><div style={{fontSize:40,marginBottom:8}}>📅</div><p style={{color:"#94a3b8",margin:"0 0 4px"}}>Loading schedule...</p><p style={{color:"#475569",fontSize:13,margin:0}}>Tournament begins June 11, 2026</p></div>
+            <div style={S.empty}>
+              <div style={{fontSize:40,marginBottom:8}}>📅</div>
+              <p style={{color:"#94a3b8",margin:"0 0 4px"}}>Schedule not loaded yet</p>
+              <p style={{color:"#475569",fontSize:13,margin:"0 0 16px"}}>Tournament begins June 11, 2026</p>
+              <button onClick={onRefresh} style={{padding:"8px 20px",background:"#1e40af",border:"none",borderRadius:8,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>Load Schedule</button>
+            </div>
           ) : filtered.length===0 ? (
             <div style={S.empty}><p style={{color:"#475569"}}>No matches in this category yet.</p></div>
           ) : (
