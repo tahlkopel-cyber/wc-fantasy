@@ -302,79 +302,104 @@
       {id:"l6",homeTeam:"Panama",awayTeam:"Croatia",date:"2026-06-26",time:"9:00 PM",group:"L"},
     ];
 
+    // Parse "HH:MM PM" + date string into a proper Date object in ET (UTC-4 during DST)
+    function parseETDateTime(dateStr, timeStr) {
+      // Build an ET-aware timestamp: treat date+time as US Eastern (UTC-4 in summer)
+      const [year, month, day] = dateStr.split("-").map(Number);
+      const [timePart, ampm] = timeStr.split(" ");
+      let [h, m] = timePart.split(":").map(Number);
+      if (ampm === "PM" && h !== 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      // ET is UTC-4 during summer (EDT). Add 4h to get UTC.
+      return new Date(Date.UTC(year, month - 1, day, h + 4, m));
+    }
+
     function buildStaticMatches() {
-      const now = new Date();
       return SCHEDULE.map(g => {
         const homeId = resolveTeamId(g.homeTeam);
         const awayId = resolveTeamId(g.awayTeam);
-        const dateObj = new Date(`${g.date}T00:00:00`);
-        const displayDate = dateObj.toLocaleDateString("en-US",{month:"short",day:"numeric",weekday:"short"});
+        const dateObj = parseETDateTime(g.date, g.time);
+        const displayDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+        const displayTime = dateObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
         return {
           id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam,
           homeId, awayId, homeScore: 0, awayScore: 0,
           completed: false, live: false, isKnockout: false,
-          notes: `Group ${g.group}`, status: g.time,
-          displayDate, displayTime: g.time, dateObj, group: g.group,
+          notes: `Group ${g.group}`, status: displayTime,
+          displayDate, displayTime, dateObj, group: g.group,
         };
-      }).sort((a,b) => a.dateObj - b.dateObj);
+      }).sort((a, b) => a.dateObj - b.dateObj);
     }
 
-    const SOFASCORE_WC_ID = "16"; // FIFA World Cup 2026 tournament ID on Sofascore
-
-    async function fetchSofascore() {
+    // ============================================================
+    // ESPN API - fetches World Cup live/completed scores
+    // Pulls a window of dates around today to catch all active matches
+    // ============================================================
+    async function fetchESPN() {
       try {
-        // Fetch today + next few days to get live and upcoming
+        // Build a date range: 2 days back through 4 days ahead (covers in-progress + recent results)
         const today = new Date();
         const dates = [];
-        for (let i = -1; i <= 2; i++) {
+        for (let i = -2; i <= 4; i++) {
           const d = new Date(today);
           d.setDate(d.getDate() + i);
-          dates.push(d.toISOString().split("T")[0]);
+          // ESPN date format: YYYYMMDD
+          const y = d.getFullYear();
+          const mo = String(d.getMonth() + 1).padStart(2, "0");
+          const da = String(d.getDate()).padStart(2, "0");
+          dates.push(`${y}${mo}${da}`);
         }
-        const all = [];
-        for (const date of dates) {
-          try {
-            const r = await fetch(`https://api.sofascore.com/api/v1/sport/football/scheduled-events/${date}`, {
-              headers: { "Accept": "application/json" }
-            });
-            if (!r.ok) continue;
-            const data = await r.json();
-            if (data?.events) {
-              // Filter only World Cup matches (tournament id 16)
-              const wcMatches = data.events.filter(e => e.tournament?.uniqueTournament?.id === 16 || e.uniqueTournament?.id === 16 || e.tournament?.id === 16);
-              all.push(...wcMatches);
-            }
-          } catch {}
-        }
-        return all;
+        // ESPN accepts a date range as dates=YYYYMMDD-YYYYMMDD
+        const dateRange = `${dates[0]}-${dates[dates.length - 1]}`;
+        const url = `https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${dateRange}&limit=100`;
+        const r = await fetch(url, { headers: { "Accept": "application/json" } });
+        if (!r.ok) return [];
+        const data = await r.json();
+        return data?.events || [];
       } catch { return []; }
     }
 
-    function parseSofascoreMatches(events) {
+    function parseESPNMatches(events) {
       return events.map(ev => {
-        const homeName = ev.homeTeam?.name || ev.homeTeam?.shortName || "";
-        const awayName = ev.awayTeam?.name || ev.awayTeam?.shortName || "";
-        const status = ev.status?.type || "";
-        const completed = status === "finished";
-        const live = status === "inprogress";
-        const homeScore = ev.homeScore?.current ?? 0;
-        const awayScore = ev.awayScore?.current ?? 0;
-        const dateObj = ev.startTimestamp ? new Date(ev.startTimestamp * 1000) : null;
-        const displayDate = dateObj ? dateObj.toLocaleDateString("en-US",{month:"short",day:"numeric",weekday:"short"}) : "";
-        const displayTime = dateObj ? dateObj.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}) : "";
-        const roundName = ev.roundInfo?.name || ev.roundInfo?.round || "";
+        const comp = ev.competitions?.[0];
+        if (!comp) return null;
+        const competitors = comp.competitors || [];
+        const home = competitors.find(c => c.homeAway === "home") || competitors[0];
+        const away = competitors.find(c => c.homeAway === "away") || competitors[1];
+        if (!home || !away) return null;
+
+        const homeName = home.team?.displayName || home.team?.name || "";
+        const awayName = away.team?.displayName || away.team?.name || "";
+        const statusType = comp.status?.type?.name || "";
+        const completed = statusType === "STATUS_FINAL";
+        const live = statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME";
+        const homeScore = parseInt(home.score || "0", 10);
+        const awayScore = parseInt(away.score || "0", 10);
+
+        // ESPN returns UTC ISO timestamps — convert to local time for display
+        const dateObj = ev.date ? new Date(ev.date) : null;
+        const displayDate = dateObj ? dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "";
+        const displayTime = dateObj ? dateObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+
+        // Determine if knockout round
+        const notesRaw = ev.season?.slug || comp.notes?.[0]?.headline || ev.name || "";
+        const roundName = comp.notes?.[0]?.headline || notesRaw;
         const isKnockout = typeof roundName === "string" && ["round of 32","round of 16","quarter","semi","final","third"].some(k => roundName.toLowerCase().includes(k));
-        const clockStr = ev.time?.played ? `${ev.time.played}'` : "";
+
+        // Clock display for live games
+        const clockStr = comp.status?.displayClock ? `${comp.status.displayClock}'` : (live ? "Live" : "");
+        const statusDisplay = live ? clockStr : completed ? "FT" : displayTime;
+
         return {
           id: String(ev.id),
           homeTeam: homeName, awayTeam: awayName,
           homeId: resolveTeamId(homeName), awayId: resolveTeamId(awayName),
           homeScore, awayScore, completed, live, isKnockout,
-          notes: roundName, status: live ? clockStr || "Live" : completed ? "FT" : displayTime,
+          notes: roundName, status: statusDisplay,
           displayDate, displayTime, dateObj,
         };
-      }).filter(m => m.homeTeam && m.awayTeam)
-        .sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
+      }).filter(m => m && m.homeTeam && m.awayTeam)
+        .sort((a, b) => (a.dateObj || 0) - (b.dateObj || 0));
     }
 
     function resolveTeamId(name) {
@@ -578,9 +603,9 @@
         const staticMatches = buildStaticMatches();
 
         try {
-          const events = await fetchSofascore();
+          const events = await fetchESPN();
           if (events && events.length > 0) {
-            const liveMatches = parseSofascoreMatches(events);
+            const liveMatches = parseESPNMatches(events);
 
             // Merge live data onto static schedule
             const liveByTeams = {};
@@ -984,7 +1009,7 @@
         <div>
           <h3 style={{color:"#f59e0b",textAlign:"center",marginBottom:4}}>Admin Panel</h3>
           <p style={{color:"#64748b",fontSize:12,textAlign:"center",marginBottom:12}}>Scores auto-update from ESPN. Use overrides only if ESPN data is wrong.</p>
-          <button onClick={onRefresh} style={{width:"100%",padding:"8px",background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#94a3b8",fontSize:13,cursor:"pointer",marginBottom:12}}>↻ Force Refresh ESPN Data</button>
+          <button onClick={onRefresh} style={{width:"100%",padding:"8px",background:"#1e293b",border:"1px solid #334155",borderRadius:8,color:"#94a3b8",fontSize:13,cursor:"pointer",marginBottom:12}}>↻ Force Refresh Live Scores</button>
           <div style={{display:"flex",gap:6,marginBottom:16}}>
             {["group","knockout","reset"].map(s=>(
               <button key={s} style={{flex:1,padding:"8px 4px",background:sub===s?"#1e3a5f":"#1e293b",border:`1px solid ${sub===s?"#3b82f6":"#334155"}`,borderRadius:8,color:sub===s?"#f1f5f9":"#94a3b8",fontSize:12,cursor:"pointer"}} onClick={()=>setSub(s)}>
