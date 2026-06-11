@@ -358,7 +358,7 @@
         const homeName = home.team?.displayName || home.team?.name || "";
         const awayName = away.team?.displayName || away.team?.name || "";
         const statusType = comp.status?.type?.name || "";
-        const completed = statusType === "STATUS_FINAL";
+        const completed = statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME";
         const live = statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME";
         const homeScore = parseInt(home.score || "0", 10);
         const awayScore = parseInt(away.score || "0", 10);
