@@ -586,6 +586,9 @@
         return () => clearInterval(t);
       }, [view]);
 
+      // Persist last good ESPN data across failed polls — never wipe live scores on a bad fetch
+      const lastGoodMatches = React.useRef(null);
+
       const refreshESPN = useCallback(async () => {
         const staticMatches = buildStaticMatches();
 
@@ -609,6 +612,8 @@
             });
             liveMatches.filter(m => m.isKnockout).forEach(m => merged.push(m));
             merged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
+
+            lastGoodMatches.current = merged;
             setMatches(merged);
 
             const autoGR = computeGroupStandings(merged);
@@ -620,10 +625,12 @@
             }
             setLastUpdated(new Date());
           } else {
-            setMatches(staticMatches);
+            // ESPN returned empty — keep last good data if we have it
+            if (!lastGoodMatches.current) setMatches(staticMatches);
           }
         } catch {
-          setMatches(staticMatches);
+          // Fetch failed — keep last good data if we have it
+          if (!lastGoodMatches.current) setMatches(staticMatches);
         }
       }, []);
 
