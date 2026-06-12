@@ -564,10 +564,12 @@
         async function init() {
           const data = await loadAllData();
           if (!data) { setLoadError("Could not connect to database. Check your internet and try again."); setView("error"); return; }
-          let { draftOrder: order, pickIndex: idx, picks: p, groupResults: gr, knockoutResults: kr } = data;
+          let { draftOrder: order, pickIndex: idx, picks: p } = data;
           if (!order || order.length === 0) { order = shuffleArray(MANAGERS); await saveDraftOrder(order); await savePickIndex(0); }
           setDraftOrder(order); setSnakePicks(buildSnakeOrder(order));
-          setPicks(p); setPickIndex(idx); setGroupResults(gr); setKnockoutResults(kr);
+          // groupResults and knockoutResults are computed fresh from ESPN on first poll —
+          // do not load stale values from DB which may have premature group bonuses
+          setPicks(p); setPickIndex(idx);
           if (Object.values(p).reduce((a,b)=>a+b.length,0) >= TOTAL_TEAMS) setDraftDone(true);
           setView("home");
         }
@@ -579,8 +581,9 @@
         const t = setInterval(async () => {
           const data = await loadAllData();
           if (!data) return;
+          // Only sync picks and pickIndex from DB — groupResults/knockoutResults are
+          // computed from live ESPN data and must not be overwritten by stale DB values
           setPicks(data.picks); setPickIndex(data.pickIndex);
-          setGroupResults(data.groupResults); setKnockoutResults(data.knockoutResults);
           if (Object.values(data.picks).reduce((a,b)=>a+b.length,0) >= TOTAL_TEAMS) setDraftDone(true);
         }, 15000);
         return () => clearInterval(t);
