@@ -764,7 +764,7 @@
           </div>
           <div style={{padding:16}}>
             {tab==="draft" && <DraftTab snakePicks={snakePicks} pickIndex={pickIndex} curPick={curPick} currentManager={currentManager} picks={picks} allPicked={allPicked} draftDone={draftDone} draftOrder={draftOrder} onPick={doPick} saving={saving}/>}
-            {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults}/>}
+            {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults} matches={matches}/>}
             {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated}/>}
             {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN} picks={picks}/>}
             {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onUndo={doUndoLastPick} onRefresh={refreshESPN} picks={picks} snakePicks={snakePicks} pickIndex={pickIndex}/>}
@@ -849,12 +849,19 @@
       );
     }
 
-    function SquadTab({picks,currentManager,groupResults,knockoutResults}) {
+    function SquadTab({picks,currentManager,groupResults,knockoutResults,matches}) {
       const [viewing,setViewing]=useState(currentManager);
       const teams=ALL_TEAMS.filter(t=>(picks[viewing]||[]).includes(t.id));
       function teamPts(id) {
-        let p=0; const gr=groupResults[id];
-        // groupResults only contains winner/runnerUp once group is fully complete (set in computeGroupStandings)
+        let p=0;
+        // Per-game match points
+        (matches||[]).forEach(m => {
+          if (!m.completed || m.isKnockout) return;
+          if (m.homeId===id) { if(m.homeScore>m.awayScore) p+=SCORING.groupWin; else if(m.homeScore===m.awayScore) p+=SCORING.groupDraw; }
+          else if (m.awayId===id) { if(m.awayScore>m.homeScore) p+=SCORING.groupWin; else if(m.homeScore===m.awayScore) p+=SCORING.groupDraw; }
+        });
+        // Group finishing bonus — only populated once full group is complete
+        const gr=groupResults[id];
         if(gr==="winner")p+=SCORING.groupWinner; else if(gr==="runnerUp")p+=SCORING.groupRunnerUp; else if(gr==="third")p+=SCORING.groupThird;
         (knockoutResults[id]||[]).forEach(r=>{p+=SCORING[r]||0;}); return p;
       }
