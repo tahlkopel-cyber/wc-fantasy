@@ -416,8 +416,8 @@
         if (!teams.some(t => t.played > 0)) return;
         teams.sort((a, b) => b.pts - a.pts || (b.gf-b.ga)-(a.gf-a.ga) || b.gf - a.gf);
         const gm = matches.filter(m => !m.isKnockout && m.completed && (stats[m.homeId]?.group===grp || stats[m.awayId]?.group===grp));
+        // Only award group bonuses once all 6 group games are complete
         if (gm.length >= 6) { gr[teams[0].id]="winner"; gr[teams[1].id]="runnerUp"; thirds.push({...teams[2],gd:teams[2].gf-teams[2].ga}); }
-        else { if(teams[0].played>0) gr[teams[0].id]="winner"; if(teams[1].played>0) gr[teams[1].id]="runnerUp"; }
       });
       thirds.sort((a,b) => b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
       thirds.slice(0,8).forEach(t => { gr[t.id]="third"; });
@@ -550,7 +550,7 @@
       const [adminMode, setAdminMode] = useState(false);
       const [notif, setNotif] = useState(null);
       const [draftDone, setDraftDone] = useState(false);
-      const [tab, setTab] = useState("draft");
+      const [tab, setTab] = useState("scores");
       const [scoringOpen, setScoringOpen] = useState(false);
       const [lastUpdated, setLastUpdated] = useState(null);
       const [saving, setSaving] = useState(false);
@@ -718,7 +718,7 @@
             <p style={S.prompt}>Select your name to continue</p>
             <div style={S.mgrGrid}>
               {MANAGERS.map(m => (
-                <button key={m} style={S.mgrBtn} onClick={()=>{setCurrentManager(m);setAdminMode(false);setView("app");setTab("draft");}}>
+                <button key={m} style={S.mgrBtn} onClick={()=>{setCurrentManager(m);setAdminMode(false);setView("app");setTab("scores");}}>
                   <div style={S.avatar}>{m[0]}</div>
                   <span style={S.mgrLabel}>{m}</span>
                 </button>
@@ -851,6 +851,7 @@
       const teams=ALL_TEAMS.filter(t=>(picks[viewing]||[]).includes(t.id));
       function teamPts(id) {
         let p=0; const gr=groupResults[id];
+        // groupResults only contains winner/runnerUp once group is fully complete (set in computeGroupStandings)
         if(gr==="winner")p+=SCORING.groupWinner; else if(gr==="runnerUp")p+=SCORING.groupRunnerUp; else if(gr==="third")p+=SCORING.groupThird;
         (knockoutResults[id]||[]).forEach(r=>{p+=SCORING[r]||0;}); return p;
       }
@@ -912,7 +913,8 @@
     }
 
     function ScoresTab({matches,lastUpdated,onRefresh,picks}) {
-      const [filter, setFilter] = useState("all");
+      // "active" = live + upcoming, "completed" = results desc, "all" = all matches
+      const [filter, setFilter] = useState("active");
       const live=matches.filter(m=>m.live);
       const completed=matches.filter(m=>m.completed);
       const upcoming=matches.filter(m=>!m.live&&!m.completed);
@@ -927,9 +929,12 @@
       }
 
       // Filter matches based on tab
-      const filtered = filter === "live" ? live : filter === "completed" ? completed : filter === "upcoming" ? upcoming : matches;
+      let filtered;
+      if (filter === "active") filtered = [...live, ...upcoming].sort((a,b)=>(a.dateObj||0)-(b.dateObj||0));
+      else if (filter === "completed") filtered = [...completed].sort((a,b)=>(b.dateObj||0)-(a.dateObj||0));
+      else filtered = matches;
 
-      // Group by date
+      // Group by date — results view is date-descending so sort date keys accordingly
       const byDate = {};
       filtered.forEach(m => {
         const key = m.displayDate || "TBD";
@@ -965,9 +970,9 @@
           {lastUpdated&&<p style={{color:"#475569",fontSize:11,marginBottom:8}}>Updated {lastUpdated.toLocaleTimeString()} · Auto-refreshes every 90s</p>}
 
           <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto"}}>
-            {[["all","All"],["live","🔴 Live"],["upcoming","📅 Upcoming"],["completed","✅ Results"]].map(([val,lbl])=>(
+            {[["active","🔴 Live & Upcoming"],["completed","✅ Results"],["all","All"]].map(([val,lbl])=>(
               <button key={val} onClick={()=>setFilter(val)} style={{padding:"5px 12px",background:filter===val?"#f59e0b":"#1e293b",border:`1px solid ${filter===val?"#f59e0b":"#334155"}`,borderRadius:20,color:filter===val?"#000":"#94a3b8",fontSize:12,fontWeight:filter===val?700:400,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
-                {lbl} {val==="live"&&live.length>0?`(${live.length})`:""}
+                {lbl} {val==="active"&&live.length>0?`(${live.length} live)`:""}
               </button>
             ))}
           </div>
