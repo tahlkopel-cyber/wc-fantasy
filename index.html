@@ -314,8 +314,54 @@
       return new Date(Date.UTC(year, month - 1, day, h + 4, m));
     }
 
+    // Round of 32 through Final placeholders — shown until ESPN populates real teams
+    const KNOCKOUT_PLACEHOLDERS = [
+      // Jun 28 — Round of 32
+      {id:"r32_76", homeTeam:"Group C Winner",    awayTeam:"Group F Runner-up",           date:"2026-06-28", time:"1:00 PM"},
+      {id:"r32_73", homeTeam:"Group A Runner-up", awayTeam:"Group B Runner-up",           date:"2026-06-28", time:"3:00 PM"},
+      {id:"r32_74", homeTeam:"Group E Winner",    awayTeam:"Best 3rd (A/B/C/D/F)",        date:"2026-06-28", time:"4:30 PM"},
+      {id:"r32_75", homeTeam:"Group F Winner",    awayTeam:"Group C Runner-up",           date:"2026-06-28", time:"9:00 PM"},
+      // Jun 29
+      {id:"r32_78", homeTeam:"Group E Runner-up", awayTeam:"Group I Runner-up",           date:"2026-06-29", time:"1:00 PM"},
+      {id:"r32_77", homeTeam:"Group I Winner",    awayTeam:"Best 3rd (C/D/F/G/H)",        date:"2026-06-29", time:"5:00 PM"},
+      {id:"r32_79", homeTeam:"Group A Winner",    awayTeam:"Best 3rd (C/E/F/H/I)",        date:"2026-06-29", time:"9:00 PM"},
+      // Jun 30
+      {id:"r32_80", homeTeam:"Group L Winner",    awayTeam:"Best 3rd (E/H/I/J/K)",        date:"2026-06-30", time:"12:00 PM"},
+      {id:"r32_81", homeTeam:"Group B Winner",    awayTeam:"Group H Winner",              date:"2026-06-30", time:"3:00 PM"},
+      {id:"r32_82", homeTeam:"Group G Winner",    awayTeam:"Best 3rd (A/E/H/I/J)",        date:"2026-06-30", time:"4:00 PM"},
+      // Jul 1
+      {id:"r32_84", homeTeam:"Group D Runner-up", awayTeam:"Group G Runner-up",           date:"2026-07-01", time:"2:00 PM"},
+      {id:"r32_83", homeTeam:"Group D Winner",    awayTeam:"Best 3rd (B/E/F/I/J)",        date:"2026-07-01", time:"8:00 PM"},
+      // Jul 2
+      {id:"r32_85", homeTeam:"Group L Runner-up", awayTeam:"Group K Runner-up",           date:"2026-07-02", time:"3:00 PM"},
+      {id:"r32_86", homeTeam:"Group J Winner",    awayTeam:"Group H Runner-up",           date:"2026-07-02", time:"6:00 PM"},
+      // Jul 3
+      {id:"r32_88", homeTeam:"Group J Runner-up", awayTeam:"Group B Runner-up",           date:"2026-07-03", time:"1:00 PM"},
+      {id:"r32_87", homeTeam:"Group K Winner",    awayTeam:"Best 3rd (D/E/I/J/L)",        date:"2026-07-03", time:"9:30 PM"},
+      // Jul 4–7 — Round of 16
+      {id:"r16_1",  homeTeam:"R32 M73 Winner",    awayTeam:"R32 M75 Winner",              date:"2026-07-04", time:"1:00 PM"},
+      {id:"r16_2",  homeTeam:"R32 M74 Winner",    awayTeam:"R32 M77 Winner",              date:"2026-07-04", time:"5:00 PM"},
+      {id:"r16_3",  homeTeam:"R32 M76 Winner",    awayTeam:"R32 M78 Winner",              date:"2026-07-05", time:"4:00 PM"},
+      {id:"r16_4",  homeTeam:"R32 M79 Winner",    awayTeam:"R32 M80 Winner",              date:"2026-07-05", time:"8:00 PM"},
+      {id:"r16_5",  homeTeam:"R32 M83 Winner",    awayTeam:"R32 M84 Winner",              date:"2026-07-06", time:"3:00 PM"},
+      {id:"r16_6",  homeTeam:"R32 M81 Winner",    awayTeam:"R32 M82 Winner",              date:"2026-07-06", time:"8:00 PM"},
+      {id:"r16_7",  homeTeam:"R32 M86 Winner",    awayTeam:"R32 M88 Winner",              date:"2026-07-07", time:"12:00 PM"},
+      {id:"r16_8",  homeTeam:"R32 M85 Winner",    awayTeam:"R32 M87 Winner",              date:"2026-07-07", time:"4:00 PM"},
+      // Jul 9–11 — Quarterfinals
+      {id:"qf_1",   homeTeam:"R16 Match 1 Winner", awayTeam:"R16 Match 2 Winner",         date:"2026-07-09", time:"4:00 PM"},
+      {id:"qf_2",   homeTeam:"R16 Match 5 Winner", awayTeam:"R16 Match 6 Winner",         date:"2026-07-10", time:"3:00 PM"},
+      {id:"qf_3",   homeTeam:"R16 Match 3 Winner", awayTeam:"R16 Match 4 Winner",         date:"2026-07-11", time:"5:00 PM"},
+      {id:"qf_4",   homeTeam:"R16 Match 7 Winner", awayTeam:"R16 Match 8 Winner",         date:"2026-07-11", time:"9:00 PM"},
+      // Jul 14–15 — Semifinals
+      {id:"sf_1",   homeTeam:"QF 1 Winner",        awayTeam:"QF 2 Winner",                date:"2026-07-14", time:"3:00 PM"},
+      {id:"sf_2",   homeTeam:"QF 3 Winner",        awayTeam:"QF 4 Winner",                date:"2026-07-15", time:"3:00 PM"},
+      // Jul 18–19 — 3rd Place + Final
+      {id:"3rd",    homeTeam:"SF 1 Loser",          awayTeam:"SF 2 Loser",                 date:"2026-07-18", time:"3:00 PM"},
+      {id:"final",  homeTeam:"SF 1 Winner",         awayTeam:"SF 2 Winner",                date:"2026-07-19", time:"3:00 PM"},
+    ];
+
     function buildStaticMatches() {
-      return SCHEDULE.map(g => {
+      const groupMatches = SCHEDULE.map(g => {
         const homeId = resolveTeamId(g.homeTeam);
         const awayId = resolveTeamId(g.awayTeam);
         const dateObj = parseETDateTime(g.date, g.time);
@@ -328,7 +374,22 @@
           notes: `Group ${g.group}`, status: displayTime,
           displayDate, displayTime, dateObj, group: g.group,
         };
-      }).sort((a, b) => a.dateObj - b.dateObj);
+      });
+
+      const knockoutMatches = KNOCKOUT_PLACEHOLDERS.map(g => {
+        const dateObj = parseETDateTime(g.date, g.time);
+        const displayDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" });
+        const displayTime = dateObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+        return {
+          id: g.id, homeTeam: g.homeTeam, awayTeam: g.awayTeam,
+          homeId: null, awayId: null, homeScore: 0, awayScore: 0,
+          completed: false, live: false, isKnockout: true,
+          notes: "Knockout", status: displayTime,
+          displayDate, displayTime, dateObj,
+        };
+      });
+
+      return [...groupMatches, ...knockoutMatches].sort((a, b) => a.dateObj - b.dateObj);
     }
 
     // ============================================================
