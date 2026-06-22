@@ -634,7 +634,9 @@
           // do not load stale values from DB which may have premature group bonuses
           setPicks(p); setPickIndex(idx);
           if (Object.values(p).reduce((a,b)=>a+b.length,0) >= TOTAL_TEAMS) setDraftDone(true);
-          setView("home");
+          // Draft is complete — skip home screen, default to Tahl on the Live tab
+          setCurrentManager("Tahl");
+          setView("app");
         }
         init();
       }, []);
@@ -814,7 +816,7 @@
           {notif && <div style={{...S.notif,background:notif.type==="err"?"#dc2626":"#16a34a"}}>{notif.msg}</div>}
           {saving && <div style={{...S.notif,background:"#1e40af"}}>💾 Saving pick...</div>}
           <div style={S.topbar}>
-            <button style={S.backBtn} onClick={()=>setView("home")}>← Back</button>
+            <button style={S.backBtn} onClick={()=>{setCurrentManager("Tahl");setAdminMode(false);setTab("scores");}}>← Back</button>
             <span style={S.topTitle}>⚽ WC Fantasy</span>
             <span style={S.topUser}>{currentManager}</span>
           </div>
@@ -828,7 +830,7 @@
           <div style={{padding:16}}>
             {tab==="draft" && <DraftTab snakePicks={snakePicks} pickIndex={pickIndex} curPick={curPick} currentManager={currentManager} picks={picks} allPicked={allPicked} draftDone={draftDone} draftOrder={draftOrder} onPick={doPick} saving={saving}/>}
             {tab==="squad" && <SquadTab picks={picks} currentManager={currentManager} groupResults={groupResults} knockoutResults={knockoutResults} matches={matches}/>}
-            {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated}/>}
+            {tab==="leaderboard" && <LeaderboardTab scores={scores} picks={picks} lastUpdated={lastUpdated} matches={matches} groupResults={groupResults} knockoutResults={knockoutResults}/>}
             {tab==="scores" && <ScoresTab matches={matches} lastUpdated={lastUpdated} onRefresh={refreshESPN} picks={picks}/>}
             {tab==="admin" && adminMode && <AdminTab groupResults={groupResults} knockoutResults={knockoutResults} onSaveGR={saveManualGR} onSaveKR={saveManualKR} onReset={doReset} onUndo={doUndoLastPick} onRefresh={refreshESPN} picks={picks} snakePicks={snakePicks} pickIndex={pickIndex}/>}
           </div>
@@ -959,18 +961,135 @@
       );
     }
 
-    function LeaderboardTab({scores,picks,lastUpdated}) {
+    function LeaderboardTab({scores,picks,lastUpdated,matches,groupResults,knockoutResults}) {
       const ranked=[...MANAGERS].map(m=>({m,score:scores[m]||0,teams:(picks[m]||[]).length})).sort((a,b)=>b.score-a.score);
       const medals=["🥇","🥈","🥉","4️⃣"];
+      const [expanded, setExpanded] = useState(null);
+
+      // Build teamId -> manager lookup
+      const t2m = {};
+      Object.entries(picks||{}).forEach(([mgr,ids]) => ids.forEach(id => t2m[id]=mgr));
+
+      function getBreakdown(mgr) {
+        const mgrTeamIds = picks[mgr] || [];
+        const rows = [];
+
+        // Per-game group stage rows
+        (matches||[]).filter(m => m.completed && !m.isKnockout).forEach(m => {
+          const homeOwner = t2m[m.homeId];
+          const awayOwner = t2m[m.awayId];
+          if (homeOwner !== mgr && awayOwner !== mgr) return;
+
+          const isMine = homeOwner === mgr;
+          const teamName = isMine ? m.homeTeam : m.awayTeam;
+          const oppName  = isMine ? m.awayTeam : m.homeTeam;
+          const myScore  = isMine ? m.homeScore : m.awayScore;
+          const oppScore = isMine ? m.awayScore : m.homeScore;
+          let pts = 0;
+          if (myScore > oppScore) pts = SCORING.groupWin;
+          else if (myScore === oppScore) pts = SCORING.groupDraw;
+          const result = myScore > oppScore ? "W" : myScore === oppScore ? "D" : "L";
+          rows.push({
+            label: `${teamName} vs ${oppName}`,
+            score: `${myScore}–${oppScore}`,
+            result, pts,
+            dateObj: m.dateObj,
+            type: "group"
+          });
+        });
+
+        // Group bonuses per team
+        mgrTeamIds.forEach(tid => {
+          const gr = groupResults[tid];
+          if (!gr) return;
+          const team = ALL_TEAMS.find(t => t.id === tid);
+          const teamName = team?.name || tid;
+          if (gr === "winner") rows.push({ label: `${teamName} — Group Winner Bonus`, score: "", result: "", pts: SCORING.groupWinner, type: "bonus", dateObj: null });
+          else if (gr === "runnerUp") rows.push({ label: `${teamName} — Runner-Up Bonus`, score: "", result: "", pts: SCORING.groupRunnerUp, type: "bonus", dateObj: null });
+          else if (gr === "third") rows.push({ label: `${teamName} — 3rd Place Bonus`, score: "", result: "", pts: SCORING.groupThird, type: "bonus", dateObj: null });
+        });
+
+        // Knockout rows
+        (matches||[]).filter(m => m.completed && m.isKnockout).forEach(m => {
+          const homeOwner = t2m[m.homeId];
+          const awayOwner = t2m[m.awayId];
+          if (homeOwner !== mgr && awayOwner !== mgr) return;
+          const isMine = homeOwner === mgr;
+          const teamName = isMine ? m.homeTeam : m.awayTeam;
+          const myScore  = isMine ? m.homeScore : m.awayScore;
+          const oppScore = isMine ? m.awayScore : m.homeScore;
+          const oppName  = isMine ? m.awayTeam : m.homeTeam;
+          const won = myScore > oppScore;
+          const roundKey = m.notes?.toLowerCase().includes("32") ? "roundOf32"
+            : m.notes?.toLowerCase().includes("16") ? "roundOf16"
+            : m.notes?.toLowerCase().includes("quarter") ? "quarterFinal"
+            : m.notes?.toLowerCase().includes("semi") ? "semiFinal"
+            : m.notes?.toLowerCase().includes("third") ? "thirdPlace"
+            : m.notes?.toLowerCase().includes("final") ? "final" : null;
+          const pts = won && roundKey ? (SCORING[roundKey] || 0) : 0;
+          rows.push({
+            label: `${teamName} vs ${oppName} (${m.notes || "Knockout"})`,
+            score: `${myScore}–${oppScore}`,
+            result: won ? "W" : "L",
+            pts, type: "knockout", dateObj: m.dateObj
+          });
+        });
+
+        // Sort: group games by date, then bonuses, then knockout
+        rows.sort((a,b) => {
+          if (a.type === "bonus" && b.type !== "bonus") return 1;
+          if (b.type === "bonus" && a.type !== "bonus") return -1;
+          return (a.dateObj||0) - (b.dateObj||0);
+        });
+        return rows;
+      }
+
       return (
         <div>
           <h3 style={{color:"#f1f5f9",textAlign:"center",marginBottom:4}}>Fantasy Leaderboard</h3>
           {lastUpdated&&<p style={{color:"#475569",fontSize:11,textAlign:"center",marginBottom:16}}>Scores updated {lastUpdated.toLocaleTimeString()}</p>}
           {ranked.map((e,i)=>(
-            <div key={e.m} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:i===0?"linear-gradient(135deg,#78350f,#92400e)":"#1e293b",border:`1px solid ${i===0?"#f59e0b":"#334155"}`,borderRadius:12,marginBottom:8}}>
-              <span style={{fontSize:26}}>{medals[i]}</span>
-              <div style={{flex:1}}><div style={{color:"#f1f5f9",fontWeight:700,fontSize:17}}>{e.m}</div><div style={{color:"#64748b",fontSize:12}}>{e.teams} teams drafted</div></div>
-              <span style={{color:"#f59e0b",fontWeight:800,fontSize:24}}>{e.score}</span>
+            <div key={e.m} style={{marginBottom:8}}>
+              <div
+                onClick={()=>setExpanded(expanded===e.m?null:e.m)}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:i===0?"linear-gradient(135deg,#78350f,#92400e)":"#1e293b",border:`1px solid ${expanded===e.m?"#f59e0b":i===0?"#f59e0b":"#334155"}`,borderRadius:expanded===e.m?"12px 12px 0 0":12,cursor:"pointer"}}>
+                <span style={{fontSize:26}}>{medals[i]}</span>
+                <div style={{flex:1}}>
+                  <div style={{color:"#f1f5f9",fontWeight:700,fontSize:17}}>{e.m}</div>
+                  <div style={{color:"#64748b",fontSize:12}}>{e.teams} teams drafted</div>
+                </div>
+                <span style={{color:"#f59e0b",fontWeight:800,fontSize:24}}>{e.score}</span>
+                <span style={{color:"#64748b",fontSize:14}}>{expanded===e.m?"▲":"▼"}</span>
+              </div>
+              {expanded===e.m && (()=>{
+                const rows = getBreakdown(e.m);
+                if (rows.length === 0) return (
+                  <div style={{background:"#0f172a",border:"1px solid #334155",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"12px 16px"}}>
+                    <p style={{color:"#475569",fontSize:13,textAlign:"center"}}>No completed games yet</p>
+                  </div>
+                );
+                return (
+                  <div style={{background:"#0f172a",border:"1px solid #334155",borderTop:"none",borderRadius:"0 0 12px 12px",padding:"8px 0"}}>
+                    {rows.map((r,ri)=>(
+                      <div key={ri} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 16px",borderBottom:"1px solid #1e293b"}}>
+                        <div style={{flex:1}}>
+                          <div style={{color:"#cbd5e1",fontSize:13}}>{r.label}</div>
+                          {r.score && <div style={{color:"#64748b",fontSize:11,marginTop:2}}>
+                            <span style={{color:r.result==="W"?"#4ade80":r.result==="D"?"#94a3b8":"#f87171",fontWeight:700,marginRight:6}}>{r.result}</span>
+                            {r.score}
+                          </div>}
+                        </div>
+                        <span style={{color:r.pts>0?"#f59e0b":"#475569",fontWeight:700,fontSize:14,minWidth:48,textAlign:"right"}}>
+                          {r.pts>0?`+${r.pts} pts`:"0 pts"}
+                        </span>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 16px 4px"}}>
+                      <span style={{color:"#f59e0b",fontWeight:800,fontSize:15}}>Total: {e.score} pts</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
           <div style={{marginTop:20,background:"#0f172a",borderRadius:10,padding:"12px 16px",border:"1px solid #1e293b"}}>
