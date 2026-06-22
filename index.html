@@ -983,6 +983,7 @@
           const isMine = homeOwner === mgr;
           const teamName = isMine ? m.homeTeam : m.awayTeam;
           const oppName  = isMine ? m.awayTeam : m.homeTeam;
+          const oppMgr   = isMine ? awayOwner  : homeOwner;
           const myScore  = isMine ? m.homeScore : m.awayScore;
           const oppScore = isMine ? m.awayScore : m.homeScore;
           let pts = 0;
@@ -990,9 +991,10 @@
           else if (myScore === oppScore) pts = SCORING.groupDraw;
           const result = myScore > oppScore ? "W" : myScore === oppScore ? "D" : "L";
           rows.push({
-            label: `${teamName} vs ${oppName}`,
+            label: `${teamName} vs ${oppMgr ? `${oppName} (${oppMgr})` : oppName}`,
             score: `${myScore}–${oppScore}`,
             result, pts,
+            displayDate: m.displayDate || "",
             dateObj: m.dateObj,
             type: "group"
           });
@@ -1027,19 +1029,22 @@
             : m.notes?.toLowerCase().includes("third") ? "thirdPlace"
             : m.notes?.toLowerCase().includes("final") ? "final" : null;
           const pts = won && roundKey ? (SCORING[roundKey] || 0) : 0;
+          const oppMgr = isMine ? awayOwner : homeOwner;
           rows.push({
-            label: `${teamName} vs ${oppName} (${m.notes || "Knockout"})`,
+            label: `${teamName} vs ${oppMgr ? `${oppName} (${oppMgr})` : oppName} — ${m.notes || "Knockout"}`,
             score: `${myScore}–${oppScore}`,
             result: won ? "W" : "L",
-            pts, type: "knockout", dateObj: m.dateObj
+            pts, type: "knockout",
+            displayDate: m.displayDate || "",
+            dateObj: m.dateObj
           });
         });
 
-        // Sort: group games by date, then bonuses, then knockout
+        // Sort: newest first, bonuses at bottom
         rows.sort((a,b) => {
           if (a.type === "bonus" && b.type !== "bonus") return 1;
           if (b.type === "bonus" && a.type !== "bonus") return -1;
-          return (a.dateObj||0) - (b.dateObj||0);
+          return (b.dateObj||0) - (a.dateObj||0);
         });
         return rows;
       }
@@ -1073,6 +1078,7 @@
                     {rows.map((r,ri)=>(
                       <div key={ri} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 16px",borderBottom:"1px solid #1e293b"}}>
                         <div style={{flex:1}}>
+                          {r.displayDate && <div style={{color:"#475569",fontSize:10,marginBottom:2}}>{r.displayDate}</div>}
                           <div style={{color:"#cbd5e1",fontSize:13}}>{r.label}</div>
                           {r.score && <div style={{color:"#64748b",fontSize:11,marginTop:2}}>
                             <span style={{color:r.result==="W"?"#4ade80":r.result==="D"?"#94a3b8":"#f87171",fontWeight:700,marginRight:6}}>{r.result}</span>
