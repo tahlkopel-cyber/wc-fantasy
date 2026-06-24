@@ -1032,9 +1032,9 @@
           const lastGame = groupGames.sort((a,b) => (b.dateObj||0)-(a.dateObj||0))[0];
           const bonusDate = lastGame?.displayDate || "";
           const bonusDateObj = lastGame?.dateObj || null;
-          if (gr === "winner") rows.push({ label: `${teamName} — Group Winner Bonus`, score: "", pts: SCORING.groupWinner, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
-          else if (gr === "runnerUp") rows.push({ label: `${teamName} — Runner-Up Bonus`, score: "", pts: SCORING.groupRunnerUp, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
-          else if (gr === "third") rows.push({ label: `${teamName} — 3rd Place Bonus`, score: "", pts: SCORING.groupThird, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
+          if (gr === "winner" && SCORING.groupWinner > 0) rows.push({ label: `${teamName} — Group Winner Bonus`, score: "", pts: SCORING.groupWinner, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
+          else if (gr === "runnerUp" && SCORING.groupRunnerUp > 0) rows.push({ label: `${teamName} — Runner-Up Bonus`, score: "", pts: SCORING.groupRunnerUp, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
+          else if (gr === "third" && SCORING.groupThird > 0) rows.push({ label: `${teamName} — 3rd Place Bonus`, score: "", pts: SCORING.groupThird, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
         });
 
         // Knockout rows
