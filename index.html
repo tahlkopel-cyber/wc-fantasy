@@ -478,7 +478,10 @@
         const teams = ALL_TEAMS.filter(t => t.group === grp).map(t => stats[t.id]);
         if (!teams.some(t => t.played > 0)) return;
         teams.sort((a, b) => b.pts - a.pts || (b.gf-b.ga)-(a.gf-a.ga) || b.gf - a.gf);
-        const gm = matches.filter(m => !m.isKnockout && m.completed && (stats[m.homeId]?.group===grp || stats[m.awayId]?.group===grp));
+        // Count completed group games using static schedule group tags (not stats lookup which can miss unresolved IDs)
+        const staticGroupIds = new Set(ALL_TEAMS.filter(t => t.group === grp).map(t => t.id));
+        const gm = matches.filter(m => !m.isKnockout && m.completed &&
+          (staticGroupIds.has(m.homeId) || staticGroupIds.has(m.awayId)));
         // Only award group bonuses once all 6 group games are complete
         if (gm.length >= 6) { gr[teams[0].id]="winner"; gr[teams[1].id]="runnerUp"; thirds.push({...teams[2],gd:teams[2].gf-teams[2].ga}); }
       });
