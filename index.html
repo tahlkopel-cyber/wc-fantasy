@@ -431,10 +431,13 @@
         const displayDate = dateObj ? dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", weekday: "short" }) : "";
         const displayTime = dateObj ? dateObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
 
-        // Determine if knockout round
+        // Determine if knockout round — use notes first, fall back to date (group stage ends Jun 27)
         const notesRaw = ev.season?.slug || comp.notes?.[0]?.headline || ev.name || "";
         const roundName = comp.notes?.[0]?.headline || notesRaw;
-        const isKnockout = typeof roundName === "string" && ["round of 32","round of 16","quarter","semi","final","third"].some(k => roundName.toLowerCase().includes(k));
+        const notesSaysKnockout = typeof roundName === "string" && ["round of 32","round of 16","quarter","semi","final","third"].some(k => roundName.toLowerCase().includes(k));
+        const matchDate = ev.date ? new Date(ev.date) : null;
+        const afterGroupStage = matchDate && matchDate >= new Date("2026-06-28T00:00:00Z");
+        const isKnockout = notesSaysKnockout || afterGroupStage;
 
         // Clock display for live games
         const clockStr = comp.status?.displayClock ? `${comp.status.displayClock}'` : (live ? "Live" : "");
@@ -983,35 +986,55 @@
           const awayOwner = t2m[m.awayId];
           if (homeOwner !== mgr && awayOwner !== mgr) return;
 
-          const isMine = homeOwner === mgr;
-          const teamName = isMine ? m.homeTeam : m.awayTeam;
-          const oppName  = isMine ? m.awayTeam : m.homeTeam;
-          const oppMgr   = isMine ? awayOwner  : homeOwner;
-          const myScore  = isMine ? m.homeScore : m.awayScore;
-          const oppScore = isMine ? m.awayScore : m.homeScore;
+          const bothMine = homeOwner === mgr && awayOwner === mgr;
+          // Points: if manager owns both teams, winner gets 3 (draw: each gets 1 = 2 total)
           let pts = 0;
-          if (myScore > oppScore) pts = SCORING.groupWin;
-          else if (myScore === oppScore) pts = SCORING.groupDraw;
-          const result = myScore > oppScore ? "W" : myScore === oppScore ? "D" : "L";
+          if (m.homeScore > m.awayScore) {
+            if (homeOwner === mgr) pts += SCORING.groupWin;
+          } else if (m.homeScore < m.awayScore) {
+            if (awayOwner === mgr) pts += SCORING.groupWin;
+          } else {
+            if (homeOwner === mgr) pts += SCORING.groupDraw;
+            if (awayOwner === mgr) pts += SCORING.groupDraw;
+          }
+
+          // Label: show both teams with manager if same manager owns both
+          let label;
+          if (bothMine) {
+            label = `${m.homeTeam} (${mgr}) vs ${m.awayTeam} (${mgr})`;
+          } else {
+            const isMine = homeOwner === mgr;
+            const myTeam  = isMine ? m.homeTeam : m.awayTeam;
+            const oppTeam = isMine ? m.awayTeam : m.homeTeam;
+            const oppMgr  = isMine ? awayOwner  : homeOwner;
+            label = `${myTeam} vs ${oppMgr ? `${oppTeam} (${oppMgr})` : oppTeam}`;
+          }
+
           rows.push({
-            label: `${teamName} vs ${oppMgr ? `${oppName} (${oppMgr})` : oppName}`,
-            score: `${myScore}–${oppScore}`,
-            result, pts,
+            label,
+            score: `${m.homeScore}–${m.awayScore}`,
+            pts,
             displayDate: m.displayDate || "",
             dateObj: m.dateObj,
             type: "group"
           });
         });
 
-        // Group bonuses per team
+        // Group bonuses per team — find date of last completed game in that group for display
         mgrTeamIds.forEach(tid => {
           const gr = groupResults[tid];
           if (!gr) return;
           const team = ALL_TEAMS.find(t => t.id === tid);
           const teamName = team?.name || tid;
-          if (gr === "winner") rows.push({ label: `${teamName} — Group Winner Bonus`, score: "", result: "", pts: SCORING.groupWinner, type: "bonus", dateObj: null });
-          else if (gr === "runnerUp") rows.push({ label: `${teamName} — Runner-Up Bonus`, score: "", result: "", pts: SCORING.groupRunnerUp, type: "bonus", dateObj: null });
-          else if (gr === "third") rows.push({ label: `${teamName} — 3rd Place Bonus`, score: "", result: "", pts: SCORING.groupThird, type: "bonus", dateObj: null });
+          const grp = team?.group;
+          const groupTeamIds = new Set(ALL_TEAMS.filter(t => t.group === grp).map(t => t.id));
+          const groupGames = (matches||[]).filter(m => !m.isKnockout && m.completed && (groupTeamIds.has(m.homeId) || groupTeamIds.has(m.awayId)));
+          const lastGame = groupGames.sort((a,b) => (b.dateObj||0)-(a.dateObj||0))[0];
+          const bonusDate = lastGame?.displayDate || "";
+          const bonusDateObj = lastGame?.dateObj || null;
+          if (gr === "winner") rows.push({ label: `${teamName} — Group Winner Bonus`, score: "", pts: SCORING.groupWinner, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
+          else if (gr === "runnerUp") rows.push({ label: `${teamName} — Runner-Up Bonus`, score: "", pts: SCORING.groupRunnerUp, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
+          else if (gr === "third") rows.push({ label: `${teamName} — 3rd Place Bonus`, score: "", pts: SCORING.groupThird, type: "bonus", displayDate: bonusDate, dateObj: bonusDateObj });
         });
 
         // Knockout rows
@@ -1019,34 +1042,39 @@
           const homeOwner = t2m[m.homeId];
           const awayOwner = t2m[m.awayId];
           if (homeOwner !== mgr && awayOwner !== mgr) return;
-          const isMine = homeOwner === mgr;
-          const teamName = isMine ? m.homeTeam : m.awayTeam;
-          const myScore  = isMine ? m.homeScore : m.awayScore;
-          const oppScore = isMine ? m.awayScore : m.homeScore;
-          const oppName  = isMine ? m.awayTeam : m.homeTeam;
-          const won = myScore > oppScore;
+          const bothMine = homeOwner === mgr && awayOwner === mgr;
           const roundKey = m.notes?.toLowerCase().includes("32") ? "roundOf32"
             : m.notes?.toLowerCase().includes("16") ? "roundOf16"
             : m.notes?.toLowerCase().includes("quarter") ? "quarterFinal"
             : m.notes?.toLowerCase().includes("semi") ? "semiFinal"
             : m.notes?.toLowerCase().includes("third") ? "thirdPlace"
             : m.notes?.toLowerCase().includes("final") ? "final" : null;
-          const pts = won && roundKey ? (SCORING[roundKey] || 0) : 0;
-          const oppMgr = isMine ? awayOwner : homeOwner;
+          let pts = 0;
+          if (m.homeScore > m.awayScore && homeOwner === mgr) pts = SCORING[roundKey] || 0;
+          else if (m.homeScore < m.awayScore && awayOwner === mgr) pts = SCORING[roundKey] || 0;
+          // Both mine: winner earns points, loser earns 0
+          let label;
+          if (bothMine) {
+            label = `${m.homeTeam} (${mgr}) vs ${m.awayTeam} (${mgr}) — ${m.notes || "Knockout"}`;
+          } else {
+            const isMine = homeOwner === mgr;
+            const myTeam  = isMine ? m.homeTeam : m.awayTeam;
+            const oppTeam = isMine ? m.awayTeam : m.homeTeam;
+            const oppMgr  = isMine ? awayOwner  : homeOwner;
+            label = `${myTeam} vs ${oppMgr ? `${oppTeam} (${oppMgr})` : oppTeam} — ${m.notes || "Knockout"}`;
+          }
           rows.push({
-            label: `${teamName} vs ${oppMgr ? `${oppName} (${oppMgr})` : oppName} — ${m.notes || "Knockout"}`,
-            score: `${myScore}–${oppScore}`,
-            result: won ? "W" : "L",
+            label, score: `${m.homeScore}–${m.awayScore}`,
             pts, type: "knockout",
             displayDate: m.displayDate || "",
             dateObj: m.dateObj
           });
         });
 
-        // Sort: newest first, bonuses at bottom
+        // Sort: bonuses at top, then newest first
         rows.sort((a,b) => {
-          if (a.type === "bonus" && b.type !== "bonus") return 1;
-          if (b.type === "bonus" && a.type !== "bonus") return -1;
+          if (a.type === "bonus" && b.type !== "bonus") return -1;
+          if (b.type === "bonus" && a.type !== "bonus") return 1;
           return (b.dateObj||0) - (a.dateObj||0);
         });
         return rows;
@@ -1083,10 +1111,7 @@
                         <div style={{flex:1}}>
                           {r.displayDate && <div style={{color:"#475569",fontSize:10,marginBottom:2}}>{r.displayDate}</div>}
                           <div style={{color:"#cbd5e1",fontSize:13}}>{r.label}</div>
-                          {r.score && <div style={{color:"#64748b",fontSize:11,marginTop:2}}>
-                            <span style={{color:r.result==="W"?"#4ade80":r.result==="D"?"#94a3b8":"#f87171",fontWeight:700,marginRight:6}}>{r.result}</span>
-                            {r.score}
-                          </div>}
+                          {r.score && <div style={{color:"#64748b",fontSize:11,marginTop:2}}>{r.score}</div>}
                         </div>
                         <span style={{color:r.pts>0?"#f59e0b":"#475569",fontWeight:700,fontSize:14,minWidth:48,textAlign:"right"}}>
                           {r.pts>0?`+${r.pts} pts`:"0 pts"}
