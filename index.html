@@ -489,7 +489,9 @@
         if (gm.length >= 6) { gr[teams[0].id]="winner"; gr[teams[1].id]="runnerUp"; thirds.push({...teams[2],gd:teams[2].gf-teams[2].ga}); }
       });
       thirds.sort((a,b) => b.pts-a.pts||b.gd-a.gd||b.gf-a.gf);
-      thirds.slice(0,8).forEach(t => { gr[t.id]="third"; });
+      // Only assign third-place advancement once all 12 groups have finished (12 winners = all complete)
+      const completedGroups = Object.values(gr).filter(v => v === "winner").length;
+      if (completedGroups >= 12) thirds.slice(0,8).forEach(t => { gr[t.id]="third"; });
       return gr;
     }
 
