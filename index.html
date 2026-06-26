@@ -408,7 +408,22 @@
     }
 
     function parseESPNMatches(events) {
-      return events.map(ev => {
+      // Deduplicate ESPN events — keep the most "complete" event per team pair
+      // Priority: completed > live > scheduled
+      const statusPriority = s => s === "STATUS_FULL_TIME" || s === "STATUS_FINAL" ? 3
+        : (s?.startsWith("STATUS_") && s !== "STATUS_SCHEDULED" && s !== "STATUS_POSTPONED") ? 2 : 1;
+      const deduped = {};
+      events.forEach(ev => {
+        const comp = ev.competitions?.[0];
+        if (!comp) return;
+        const names = (comp.competitors || []).map(c => c.team?.displayName || "").sort().join("|");
+        if (!names) return;
+        const existing = deduped[names];
+        const newPriority = statusPriority(comp.status?.type?.name);
+        const oldPriority = existing ? statusPriority(existing.competitions?.[0]?.status?.type?.name) : 0;
+        if (!existing || newPriority > oldPriority) deduped[names] = ev;
+      });
+      return Object.values(deduped).map(ev => {
         const comp = ev.competitions?.[0];
         if (!comp) return null;
         const competitors = comp.competitors || [];
