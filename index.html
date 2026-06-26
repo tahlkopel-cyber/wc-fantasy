@@ -702,13 +702,27 @@
               return liveByTeams[key] || m;
             });
             liveMatches.filter(m => m.isKnockout).forEach(m => merged.push(m));
-            merged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
 
-            lastGoodMatches.current = merged;
-            setMatches(merged);
+            // Final dedup pass — remove any duplicate team-pair entries, keeping most complete
+            const seenKeys = {};
+            const statusRank = m => m.completed ? 3 : m.live ? 2 : 1;
+            const deduped = [];
+            merged.forEach(m => {
+              if (!m.homeId || !m.awayId) { deduped.push(m); return; }
+              const key = [m.homeId, m.awayId].sort().join("-");
+              if (!seenKeys[key] || statusRank(m) > statusRank(seenKeys[key])) {
+                seenKeys[key] = m;
+              }
+            });
+            // Rebuild: non-team entries (placeholders) + deduped team entries
+            const finalMerged = [...merged.filter(m => !m.homeId || !m.awayId), ...Object.values(seenKeys)];
+            finalMerged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
 
-            const autoGR = computeGroupStandings(merged);
-            const autoKR = computeKnockoutResults(merged);
+            lastGoodMatches.current = finalMerged;
+            setMatches(finalMerged);
+
+            const autoGR = computeGroupStandings(finalMerged);
+            const autoKR = computeKnockoutResults(finalMerged);
             if (Object.keys(autoGR).length > 0 || Object.keys(autoKR).length > 0) {
               setGroupResults(autoGR); setKnockoutResults(autoKR);
               await saveKnockoutResults(autoKR);
