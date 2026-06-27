@@ -703,19 +703,36 @@
             });
             liveMatches.filter(m => m.isKnockout).forEach(m => merged.push(m));
 
-            // Final dedup pass — remove any duplicate team-pair entries, keeping most complete
-            const seenKeys = {};
-            const statusRank = m => m.completed ? 3 : m.live ? 2 : 1;
-            const deduped = [];
-            merged.forEach(m => {
-              if (!m.homeId || !m.awayId) { deduped.push(m); return; }
-              const key = [m.homeId, m.awayId].sort().join("-");
-              if (!seenKeys[key] || statusRank(m) > statusRank(seenKeys[key])) {
-                seenKeys[key] = m;
+            // Collect dates where ESPN has returned real knockout games
+            const espnKnockoutDates = new Set();
+            liveMatches.forEach(m => {
+              if (m.isKnockout && m.homeId && m.awayId && m.dateObj) {
+                espnKnockoutDates.add(m.dateObj.toISOString().split("T")[0]);
               }
             });
-            // Rebuild: non-team entries (placeholders) + deduped team entries
-            const finalMerged = [...merged.filter(m => !m.homeId || !m.awayId), ...Object.values(seenKeys)];
+
+            // Final dedup: dedupe by team ID pair, suppress placeholders for dates ESPN has covered
+            const seenKeys = {};
+            const statusRank = m => m.completed ? 3 : m.live ? 2 : 1;
+            const finalMerged = [];
+
+            merged.forEach(m => {
+              if (!m.homeId || !m.awayId) {
+                // Placeholder — only include if ESPN has no real data for this date
+                if (m.isKnockout) {
+                  const dateKey = m.dateObj?.toISOString().split("T")[0];
+                  if (!dateKey || !espnKnockoutDates.has(dateKey)) finalMerged.push(m);
+                } else {
+                  finalMerged.push(m);
+                }
+              } else {
+                const key = [m.homeId, m.awayId].sort().join("-");
+                if (!seenKeys[key] || statusRank(m) > statusRank(seenKeys[key])) {
+                  seenKeys[key] = m;
+                }
+              }
+            });
+            finalMerged.push(...Object.values(seenKeys));
             finalMerged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
 
             lastGoodMatches.current = finalMerged;
