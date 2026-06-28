@@ -703,36 +703,40 @@
             });
             liveMatches.filter(m => m.isKnockout).forEach(m => merged.push(m));
 
-            // Collect dates where ESPN has returned real knockout games
+            // Collect dates where ESPN has ANY knockout data (fully or partially resolved)
             const espnKnockoutDates = new Set();
             liveMatches.forEach(m => {
-              if (m.isKnockout && m.homeId && m.awayId && m.dateObj) {
+              if (m.isKnockout && (m.homeId || m.awayId) && m.dateObj) {
                 espnKnockoutDates.add(m.dateObj.toISOString().split("T")[0]);
               }
             });
 
-            // Final dedup: dedupe by team ID pair, suppress placeholders for dates ESPN has covered
-            const seenKeys = {};
             const statusRank = m => m.completed ? 3 : m.live ? 2 : 1;
+            const seenFull = {};    // dedup fully-resolved games by team pair
+            const seenPartial = {}; // dedup partially-resolved games by resolvedId+date
             const finalMerged = [];
 
             merged.forEach(m => {
-              if (!m.homeId || !m.awayId) {
-                // Placeholder — only include if ESPN has no real data for this date
-                if (m.isKnockout) {
-                  const dateKey = m.dateObj?.toISOString().split("T")[0];
-                  if (!dateKey || !espnKnockoutDates.has(dateKey)) finalMerged.push(m);
-                } else {
-                  finalMerged.push(m);
-                }
-              } else {
+              if (m.homeId && m.awayId) {
+                // Fully resolved — dedup by team pair
                 const key = [m.homeId, m.awayId].sort().join("-");
-                if (!seenKeys[key] || statusRank(m) > statusRank(seenKeys[key])) {
-                  seenKeys[key] = m;
-                }
+                if (!seenFull[key] || statusRank(m) > statusRank(seenFull[key])) seenFull[key] = m;
+              } else if (m.homeId || m.awayId) {
+                // Partially resolved (one TBD team) — dedup by resolved ID + date
+                const resolvedId = m.homeId || m.awayId;
+                const dateKey = m.dateObj?.toISOString().split("T")[0] || "";
+                const partKey = `${resolvedId}-${dateKey}`;
+                if (!seenPartial[partKey] || statusRank(m) > statusRank(seenPartial[partKey])) seenPartial[partKey] = m;
+              } else if (m.isKnockout) {
+                // Full placeholder — only show if ESPN has no data at all for this date
+                const dateKey = m.dateObj?.toISOString().split("T")[0];
+                if (!dateKey || !espnKnockoutDates.has(dateKey)) finalMerged.push(m);
+              } else {
+                finalMerged.push(m);
               }
             });
-            finalMerged.push(...Object.values(seenKeys));
+            finalMerged.push(...Object.values(seenFull));
+            finalMerged.push(...Object.values(seenPartial));
             finalMerged.sort((a,b) => (a.dateObj||0) - (b.dateObj||0));
 
             lastGoodMatches.current = finalMerged;
