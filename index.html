@@ -433,7 +433,8 @@
         const roundName = comp.notes?.[0]?.headline || notesRaw;
         const notesSaysKnockout = typeof roundName === "string" && ["round of 32","round of 16","quarter","semi","final","third"].some(k => roundName.toLowerCase().includes(k));
         const matchDate = ev.date ? new Date(ev.date) : null;
-        const afterGroupStage = matchDate && matchDate >= new Date("2026-06-28T00:00:00Z");
+        // Use noon UTC Jun 28 as cutoff (= 8AM ET Jun 28) — avoids flagging late Jun 27 ET games
+        const afterGroupStage = matchDate && matchDate >= new Date("2026-06-28T12:00:00Z");
         const isKnockout = notesSaysKnockout || afterGroupStage;
 
         // Clock display for live games
@@ -1044,9 +1045,11 @@
             label = `${myTeam} vs ${oppMgr ? `${oppTeam} (${oppMgr})` : oppTeam}`;
           }
 
+          const myScore  = (homeOwner === mgr) ? m.homeScore : m.awayScore;
+          const oppScore = (homeOwner === mgr) ? m.awayScore : m.homeScore;
           rows.push({
             label,
-            score: `${m.homeScore}–${m.awayScore}`,
+            score: bothMine ? `${m.homeScore}–${m.awayScore}` : `${myScore}–${oppScore}`,
             pts,
             displayDate: m.displayDate || "",
             dateObj: m.dateObj,
@@ -1097,8 +1100,11 @@
             const oppMgr  = isMine ? awayOwner  : homeOwner;
             label = `${myTeam} vs ${oppMgr ? `${oppTeam} (${oppMgr})` : oppTeam} — ${m.notes || "Knockout"}`;
           }
+          const myScoreKO  = (homeOwner === mgr) ? m.homeScore : m.awayScore;
+          const oppScoreKO = (homeOwner === mgr) ? m.awayScore : m.homeScore;
           rows.push({
-            label, score: `${m.homeScore}–${m.awayScore}`,
+            label,
+            score: bothMine ? `${m.homeScore}–${m.awayScore}` : `${myScoreKO}–${oppScoreKO}`,
             pts, type: "knockout",
             displayDate: m.displayDate || "",
             dateObj: m.dateObj
