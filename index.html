@@ -1111,12 +1111,8 @@
           });
         });
 
-        // Sort: bonuses at top, then newest first
-        rows.sort((a,b) => {
-          if (a.type === "bonus" && b.type !== "bonus") return -1;
-          if (b.type === "bonus" && a.type !== "bonus") return 1;
-          return (b.dateObj||0) - (a.dateObj||0);
-        });
+        // Sort: all rows newest first by date
+        rows.sort((a,b) => (b.dateObj||0) - (a.dateObj||0));
         return rows;
       }
 
