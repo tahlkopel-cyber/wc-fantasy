@@ -497,14 +497,27 @@
       const kr = {};
       matches.forEach(m => {
         if (!m.completed || !m.isKnockout || !m.homeId || !m.awayId) return;
-        const n = m.notes.toLowerCase();
+        const n = (m.notes || "").toLowerCase().replace(/-/g, " "); // normalize hyphens to spaces
         let round = null;
         if (n.includes("final") && !n.includes("semi") && !n.includes("quarter") && !n.includes("third")) round = "final";
         else if (n.includes("third place")||n.includes("3rd place")) round = "thirdPlace";
-        else if (n.includes("semifinal")||n.includes("semi-final")) round = "semiFinal";
-        else if (n.includes("quarterfinal")||n.includes("quarter-final")) round = "quarterFinal";
+        else if (n.includes("semifinal")||n.includes("semi final")) round = "semiFinal";
+        else if (n.includes("quarterfinal")||n.includes("quarter final")) round = "quarterFinal";
         else if (n.includes("round of 16")) round = "roundOf16";
         else if (n.includes("round of 32")) round = "roundOf32";
+        // Fallback: if isKnockout but notes unrecognized, infer round from date
+        if (!round) {
+          const d = m.dateObj;
+          if (d) {
+            const mo = d.getUTCMonth()+1, da = d.getUTCDate();
+            if (mo===6 && da>=28 || mo===7 && da<=3) round = "roundOf32";
+            else if (mo===7 && da>=4 && da<=7) round = "roundOf16";
+            else if (mo===7 && da>=9 && da<=11) round = "quarterFinal";
+            else if (mo===7 && (da===14||da===15)) round = "semiFinal";
+            else if (mo===7 && da===18) round = "thirdPlace";
+            else if (mo===7 && da===19) round = "final";
+          }
+        }
         if (!round) return;
         const wid = m.homeScore > m.awayScore ? m.homeId : m.awayScore > m.homeScore ? m.awayId : null;
         if (wid) { if (!kr[wid]) kr[wid]=[]; if (!kr[wid].includes(round)) kr[wid].push(round); }
