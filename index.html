@@ -416,19 +416,12 @@
         const homeName = home.team?.displayName || home.team?.name || "";
         const awayName = away.team?.displayName || away.team?.name || "";
         const statusType = comp.status?.type?.name || "";
-        // ESPN provides authoritative booleans — use these instead of guessing status strings
-        const completed = comp.status?.type?.completed === true;
-        const state = comp.status?.type?.state || ""; // "pre" | "in" | "post"
-        const live = !completed && (state === "in" ||
-          (statusType.startsWith("STATUS_") && statusType !== "STATUS_SCHEDULED" &&
-           statusType !== "STATUS_POSTPONED" && statusType !== "STATUS_CANCELED" &&
-           statusType !== "STATUS_SUSPENDED" && statusType !== "STATUS_ABANDONED" &&
-           state !== "pre"));
+        const completed = statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME";
+        const live = statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME" ||
+          statusType === "STATUS_FIRST_HALF" || statusType === "STATUS_SECOND_HALF" ||
+          statusType === "STATUS_EXTRA_TIME" || statusType === "STATUS_PENALTY";
         const homeScore = parseInt(home.score || "0", 10);
         const awayScore = parseInt(away.score || "0", 10);
-        // ESPN sets winner:true on the winning competitor — needed for penalty shootout results
-        const homeWinner = home.winner === true;
-        const awayWinner = away.winner === true;
 
         // ESPN returns UTC ISO timestamps — convert to local time for display
         const dateObj = ev.date ? new Date(ev.date) : null;
@@ -452,7 +445,7 @@
           id: String(ev.id),
           homeTeam: homeName, awayTeam: awayName,
           homeId: resolveTeamId(homeName), awayId: resolveTeamId(awayName),
-          homeScore, awayScore, homeWinner, awayWinner, completed, live, isKnockout,
+          homeScore, awayScore, completed, live, isKnockout,
           notes: roundName, status: statusDisplay,
           displayDate, displayTime, dateObj,
         };
@@ -526,12 +519,7 @@
           }
         }
         if (!round) return;
-        // Use ESPN winner field first (handles penalty shootouts where score is tied)
-        let wid = null;
-        if (m.homeWinner) wid = m.homeId;
-        else if (m.awayWinner) wid = m.awayId;
-        else if (m.homeScore > m.awayScore) wid = m.homeId;
-        else if (m.awayScore > m.homeScore) wid = m.awayId;
+        const wid = m.homeScore > m.awayScore ? m.homeId : m.awayScore > m.homeScore ? m.awayId : null;
         if (wid) { if (!kr[wid]) kr[wid]=[]; if (!kr[wid].includes(round)) kr[wid].push(round); }
       });
       return kr;
@@ -1105,15 +1093,23 @@
           const awayOwner = t2m[m.awayId];
           if (homeOwner !== mgr && awayOwner !== mgr) return;
           const bothMine = homeOwner === mgr && awayOwner === mgr;
-          const roundKey = m.notes?.toLowerCase().includes("32") ? "roundOf32"
-            : m.notes?.toLowerCase().includes("16") ? "roundOf16"
-            : m.notes?.toLowerCase().includes("quarter") ? "quarterFinal"
-            : m.notes?.toLowerCase().includes("semi") ? "semiFinal"
-            : m.notes?.toLowerCase().includes("third") ? "thirdPlace"
-            : m.notes?.toLowerCase().includes("final") ? "final" : null;
+          const n = (m.notes || "").toLowerCase().replace(/-/g, " ");
+          const roundKey = n.includes("32") ? "roundOf32"
+            : n.includes("16") ? "roundOf16"
+            : n.includes("quarter") ? "quarterFinal"
+            : n.includes("semi") ? "semiFinal"
+            : n.includes("third") ? "thirdPlace"
+            : n.includes("final") ? "final" : null;
+          // Determine winner: use ESPN's winner field first (handles penalty shootouts), fall back to score
+          let homeWon = m.homeWinner === true;
+          let awayWon = m.awayWinner === true;
+          if (!homeWon && !awayWon) {
+            if (m.homeScore > m.awayScore) homeWon = true;
+            else if (m.awayScore > m.homeScore) awayWon = true;
+          }
           let pts = 0;
-          if (m.homeScore > m.awayScore && homeOwner === mgr) pts = SCORING[roundKey] || 0;
-          else if (m.homeScore < m.awayScore && awayOwner === mgr) pts = SCORING[roundKey] || 0;
+          if (homeWon && homeOwner === mgr) pts = SCORING[roundKey] || 0;
+          else if (awayWon && awayOwner === mgr) pts = SCORING[roundKey] || 0;
           // Both mine: winner earns points, loser earns 0
           let label;
           if (bothMine) {
