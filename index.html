@@ -416,12 +416,28 @@
         const homeName = home.team?.displayName || home.team?.name || "";
         const awayName = away.team?.displayName || away.team?.name || "";
         const statusType = comp.status?.type?.name || "";
-        const completed = statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME";
-        const live = statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME" ||
+        const espnCompletedFlag = comp.status?.type?.completed;
+        const espnState = comp.status?.type?.state || ""; // "pre" | "in" | "post"
+        // Prefer ESPN's boolean/state fields when present, fall back to status string matching
+        const completed = espnCompletedFlag === true || espnState === "post" ||
+          statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME" || statusType === "STATUS_FULL_PEN";
+        const live = !completed && (
+          espnState === "in" ||
+          statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME" ||
           statusType === "STATUS_FIRST_HALF" || statusType === "STATUS_SECOND_HALF" ||
-          statusType === "STATUS_EXTRA_TIME" || statusType === "STATUS_PENALTY";
+          statusType === "STATUS_EXTRA_TIME" || statusType === "STATUS_EXTRA_TIME_FIRST_HALF" ||
+          statusType === "STATUS_EXTRA_TIME_HALF" || statusType === "STATUS_EXTRA_TIME_SECOND_HALF" ||
+          statusType === "STATUS_PENALTY" || statusType === "STATUS_SHOOTOUT" ||
+          (statusType.startsWith("STATUS_") && statusType !== "STATUS_SCHEDULED" &&
+           statusType !== "STATUS_POSTPONED" && statusType !== "STATUS_CANCELED" &&
+           statusType !== "STATUS_SUSPENDED" && statusType !== "STATUS_ABANDONED" &&
+           espnState !== "pre")
+        );
         const homeScore = parseInt(home.score || "0", 10);
         const awayScore = parseInt(away.score || "0", 10);
+        // ESPN sets winner:true on the winning competitor — needed for penalty shootout results
+        const homeWinner = home.winner === true;
+        const awayWinner = away.winner === true;
 
         // ESPN returns UTC ISO timestamps — convert to local time for display
         const dateObj = ev.date ? new Date(ev.date) : null;
@@ -445,7 +461,7 @@
           id: String(ev.id),
           homeTeam: homeName, awayTeam: awayName,
           homeId: resolveTeamId(homeName), awayId: resolveTeamId(awayName),
-          homeScore, awayScore, completed, live, isKnockout,
+          homeScore, awayScore, homeWinner, awayWinner, completed, live, isKnockout,
           notes: roundName, status: statusDisplay,
           displayDate, displayTime, dateObj,
         };
@@ -519,7 +535,11 @@
           }
         }
         if (!round) return;
-        const wid = m.homeScore > m.awayScore ? m.homeId : m.awayScore > m.homeScore ? m.awayId : null;
+        let wid = null;
+        if (m.homeWinner) wid = m.homeId;
+        else if (m.awayWinner) wid = m.awayId;
+        else if (m.homeScore > m.awayScore) wid = m.homeId;
+        else if (m.awayScore > m.homeScore) wid = m.awayId;
         if (wid) { if (!kr[wid]) kr[wid]=[]; if (!kr[wid].includes(round)) kr[wid].push(round); }
       });
       return kr;
