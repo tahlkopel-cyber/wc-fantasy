@@ -1116,12 +1116,22 @@
           if (homeOwner !== mgr && awayOwner !== mgr) return;
           const bothMine = homeOwner === mgr && awayOwner === mgr;
           const n = (m.notes || "").toLowerCase().replace(/-/g, " ");
-          const roundKey = n.includes("32") ? "roundOf32"
+          let roundKey = n.includes("32") ? "roundOf32"
             : n.includes("16") ? "roundOf16"
             : n.includes("quarter") ? "quarterFinal"
             : n.includes("semi") ? "semiFinal"
             : n.includes("third") ? "thirdPlace"
             : n.includes("final") ? "final" : null;
+          // Fallback: infer round from match date (same logic as computeKnockoutResults)
+          if (!roundKey && m.dateObj) {
+            const mo = m.dateObj.getUTCMonth()+1, da = m.dateObj.getUTCDate();
+            if (mo===6 && da>=28 || (mo===7 && da<=3)) roundKey = "roundOf32";
+            else if (mo===7 && da>=4 && da<=7) roundKey = "roundOf16";
+            else if (mo===7 && da>=9 && da<=11) roundKey = "quarterFinal";
+            else if (mo===7 && (da===14||da===15)) roundKey = "semiFinal";
+            else if (mo===7 && da===18) roundKey = "thirdPlace";
+            else if (mo===7 && da===19) roundKey = "final";
+          }
           // Determine winner: use ESPN's winner field first (handles penalty shootouts), fall back to score
           let homeWon = m.homeWinner === true;
           let awayWon = m.awayWinner === true;
