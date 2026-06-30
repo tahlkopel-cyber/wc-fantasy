@@ -420,7 +420,9 @@
         const espnState = comp.status?.type?.state || ""; // "pre" | "in" | "post"
         // Prefer ESPN's boolean/state fields when present, fall back to status string matching
         const completed = espnCompletedFlag === true || espnState === "post" ||
-          statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME" || statusType === "STATUS_FULL_PEN";
+          statusType === "STATUS_FINAL" || statusType === "STATUS_FULL_TIME" ||
+          statusType === "STATUS_FULL_PEN" || statusType === "STATUS_FINAL_PEN" ||
+          statusType.includes("FINAL") || statusType.includes("FULL_TIME") || statusType.includes("FULLTIME");
         const live = !completed && (
           espnState === "in" ||
           statusType === "STATUS_IN_PROGRESS" || statusType === "STATUS_HALFTIME" ||
